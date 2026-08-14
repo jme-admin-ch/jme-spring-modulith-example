@@ -4,6 +4,11 @@
 > implemented is the failing listener, the retry policy, and the seam the bridge will hook into — plus
 > `AsyncEventFailureHooksIntegrationTests`, which proves that every Spring Modulith hook this design
 > relies on actually behaves as described here.
+>
+> The feature is the jEAP enabler **DFEA-4743, "jEAP Error Handling mit Modulith"**. This page is the
+> technical design for the application side of it; the enabler describes the scope, and this example
+> is its acceptance criterion **E-001** ("Ein JME Example demonstriert das ErrorHandling für Modulith
+> Event Publications").
 
 ## The problem
 
@@ -21,6 +26,19 @@ system uses.
 
 The goal is to close that gap: escalate an exhausted publication to the EHS, and let an operator
 retry or discard it from there — the same experience as for a failed Kafka message.
+
+The enabler splits that across three deliverables, which is worth keeping in mind while reading this
+page, because only the first one is application-side:
+
+| Deliverable                     | Content                                                                                                                                | Acceptance criteria |
+|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|---------------------|
+| A **jEAP library / starter**    | Publishes `ModulithPublicationProcessingFailedEvent` for publications that could not be processed, and acts on the retry and discard commands | J-001, J-004, J-005 |
+| The **Error Handling Service**  | Creates an error from the new event *equivalently to* `MessageProcessingFailedEvent`, and publishes the retry and discard commands          | J-002               |
+| The **Error Handling UI**       | Presents and handles Modulith publication errors equivalently to Kafka message errors                                                       | J-003               |
+
+So the "bridge" described below is not application code: it is a starter an application switches on by
+configuration. That is what makes the hooks below worth pinning down — a library has to rely on public
+Spring Modulith API, not on anything one application happens to do.
 
 ```
 Kafka event
@@ -69,7 +87,9 @@ status, the completion attempts, the publication date and the last resubmission 
 
 ## Where the bridge is invoked
 
-Three candidate trigger points, all viable:
+The bridge ships as a jEAP starter (J-001), so it has to find failed publications through public
+Spring Modulith API rather than through anything a particular application does. Three candidate
+trigger points, all viable:
 
 | Option                                                                     | Pro                                                                         | Con                                                                                |
 |----------------------------------------------------------------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------|
@@ -104,30 +124,27 @@ for its own schedulers.
 
 ### How the failure reaches the Error Handling Service
 
-There are two ways to tell the EHS that a publication has failed, and the choice decides how much
-platform work the feature costs.
+The enabler settles this: a **dedicated `ModulithPublicationProcessingFailedEvent`**, which
+"serves the same purpose as the `MessageProcessingFailedEvent` — to notify the error. The essential
+difference is that it carries the information about the EventPublication instead of an Avro message."
+The EHS is extended to create an error from it equivalently to a `MessageProcessingFailedEvent`
+(J-002), and the UI to present it equivalently to a Kafka message error (J-003).
 
-**Option 1 — reuse `MessageProcessingFailedEvent`.** The EHS stores the causing message as **raw
-bytes** together with a topic name, and a resend republishes those bytes unchanged to that topic. It
-never interprets them. So if the bridge reports the failure with `payload.originalMessage` set to the
-Avro-serialized `RetryModulithPublicationCommand` and `references.message.topicName` set to a command
-topic this application consumes, the EHS's existing resend delivers exactly that command to exactly
-this application — with **no change to the EHS at all**. The price is a failure report that lies a
-little: `MessageReference` requires a `partition` and an `offset` the bridge does not have, so they
-have to be filled with a sentinel and ignored everywhere, and the error list shows a Kafka message
-that never existed.
+It is worth recording the alternative that was *not* taken, because it explains why the platform work
+is worth it. The EHS stores the causing message as raw bytes together with a topic name, and a resend
+republishes those bytes unchanged to that topic without ever interpreting them. A bridge could
+therefore have reported the failure as an ordinary `MessageProcessingFailedEvent` whose
+`payload.originalMessage` is the Avro-serialized `RetryModulithPublicationCommand` and whose
+`references.message.topicName` is a command topic the application consumes — and the existing resend
+would have delivered exactly that command, with **no change to the EHS at all**.
 
-**Option 2 — a dedicated `ModulithPublicationProcessingFailedEvent`.** The EHS has to learn a second
-inbound contract, a second error intake path and a second notion of what "resend" means. In exchange
-the failure report says what it means — a publication, a listener and an event type — and an operator
-reading the error list sees a Modulith publication rather than a synthetic Kafka message.
+What that saves in platform work it pays for in honesty: `MessageReference` requires a `partition` and
+an `offset` that do not exist for a publication, so both would carry a sentinel that every later query
+and report over the EHS data has to know about, and an operator would see a Kafka message that never
+existed. The dedicated event says what it means — a publication, a listener and an event type — which
+is what makes J-003 possible at all.
 
-**Decision: option 2.** The message types are defined and building (see below), so the platform work
-is the remaining part. The reasoning is that this feature is aimed at operators, and an error list
-they can read is worth more than the intake code it saves; a sentinel partition and offset would also
-be a trap for anyone later writing a query or a report over the EHS data.
-
-Either way, the failure is reported with temporality `PERMANENT`, because the application has already
+Either way the failure is reported with temporality `PERMANENT`, because the application has already
 exhausted its own retries. The EHS therefore goes straight to a manual task instead of scheduling a
 resend of its own, which is the intended behaviour.
 
@@ -247,19 +264,6 @@ Note the different base types: commands import `MessagingBaseTypes.avdl` (`AvroM
 
 The consuming application declares them with `@JeapMessageConsumerContract`.
 
-#### Consequence for the failure report
-
-Defining `ModulithPublicationProcessingFailedEvent` settles the question raised above in favour of a
-**dedicated event type**: the Error Handling Service has to learn this contract as a second way for a
-failure to arrive. That is more platform work than reusing `MessageProcessingFailedEvent` would have
-been, and it buys a failure report that says what it means — a publication, a listener and an event
-type, instead of a synthetic Kafka message reference with a sentinel partition and offset — plus an
-error list an operator can actually read.
-
-The retry route is unaffected by that choice: whichever event carries the failure, the Error Handling
-Service ends up publishing a `RetryModulithPublicationCommand` to the command topic, and the receiving
-application resubmits the publication by id.
-
 ### Escalation
 
 ```mermaid
@@ -316,27 +320,26 @@ sequenceDiagram
 A resubmission that fails again produces a *new* escalation and therefore a new EHS error for the same
 publication — the same behaviour the EHS already has for a resent Kafka message that fails again.
 
-### Discard — the open problem
+### Discard
 
-Retry maps onto the EHS for free. **Discard does not.** Deleting an error in the EHS sets its state to
-`DELETED`, writes an audit entry and closes the manual task. It publishes nothing. There is therefore
-no `DiscardModulithPublicationCommand` on any topic, and the publication in this application stays
-`FAILED` forever while the EHS believes the matter is closed.
+Retry maps onto the EHS's existing resend. Discard does not: deleting an error in the EHS today sets
+its state to `DELETED`, writes an audit entry and closes the manual task, and **publishes nothing**.
+Left at that, the publication in the application would stay `FAILED` forever while the EHS believed
+the matter closed.
 
-Three ways out:
+The enabler resolves this on the platform side rather than in the application: the extended EHS
+"publishes a `DiscardModulithPublicationCommand` when the publication is to be discarded", exactly as
+it publishes a `RetryModulithPublicationCommand` when it is to be processed again. Discard therefore
+travels the same route as retry, and the two stay symmetric.
 
-| Option                                                                                                                   | Change needed        | Assessment                                                                    |
-|--------------------------------------------------------------------------------------------------------------------------|----------------------|---------------------------------------------------------------------------------|
-| **D1** Extend the EHS with an optional "publish a compensating message on delete" hook, configured per error type          | EHS feature          | Cleanest end state, symmetric with retry, benefits every system — but needs platform work |
-| **D2** The application owns discarding through its own REST API; deleting in the EHS is bookkeeping only                   | none                 | Cheapest, but the operator has to act in two places and the two can drift        |
-| **D3** A reconciliation job: the application periodically asks the EHS API which of its escalated errors are now `DELETED`, and discards those publications | none (EHS API only)  | Self-healing and needs no EHS change; costs an EHS client, the `jme_@error_#view` role and a polling interval |
+That is a genuine EHS change, not a configuration detail — worth planning for, because it is the one
+part of the flow that has no equivalent in the Kafka path. Two cheaper fallbacks exist if it has to be
+deferred: the application exposing discard through its own API (the operator then acts in two places),
+or a reconciliation job that asks the EHS API which escalated errors have become `DELETED` and
+discards those publications (the `escalated_publication` table already holds the mapping it would
+need). Neither is the target state.
 
-**Recommendation: D3 to begin with, D1 as the target.** D3 makes the feature complete without blocking
-on a platform change, and the `escalated_publication` table already holds the mapping from publication
-to EHS error that the reconciliation needs. If D1 lands later, the reconciliation job can be dropped
-and the discard command flows through the same route as the retry command.
-
-Whatever the trigger, the application-side effect is one call, hook 4:
+Whichever way the command arrives, the application-side effect is one call, hook 4:
 
 ```java
 registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier());
@@ -352,9 +355,13 @@ registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier()
 | End-to-end proof of retry and exhaustion           | `InternalAsyncEventRetryIT`                                              |
 | A running EHS and OAuth mock server to escalate to | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs`          |
 
-Implementing the bridge should not require changing any of them — only adding the bridge, the command
-consumer, the `escalated_publication` table, and the Error Handling Service support for the three
-message types that are already defined.
+Implementing the starter should not require changing any of them — only the starter itself, its
+command consumer, the `escalated_publication` table, and the Error Handling Service and UI support for
+the three message types that are already defined.
+
+This example is acceptance criterion **E-001** of the enabler, so it is also where the finished feature
+gets demonstrated: the `FAIL_ASYNC` order type already drives a publication into the state the starter
+is meant to pick up.
 
 ## Open questions
 
@@ -373,7 +380,8 @@ message types that are already defined.
 
 ## Related
 
+- Enabler **DFEA-4743 "jEAP Error Handling mit Modulith"** — scope, deliverables and acceptance criteria
 - [Architecture](architecture.md) — the two failure paths as they are today
 - [Configuration](configuration.md) — the retry properties
-- [jeap-error-handling: MessageProcessingFailedEvent](https://jeap-admin-ch.github.io/docs/jeap-error-handling/) — the contract this design reuses
+- [jeap-error-handling](https://jeap-admin-ch.github.io/docs/jeap-error-handling/) — the service this design extends
 - [Spring Modulith: Event publication registry](https://docs.spring.io/spring-modulith/reference/events.html)
