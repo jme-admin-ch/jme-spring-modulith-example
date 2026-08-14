@@ -428,6 +428,8 @@ be pointed at it.
   discarding a failed event publication, which the planned error handling bridge will build on
 * `AsyncEventFailureNotificationIntegrationTests` — the proactive hook that reports a failed
   publication without polling, and what it cannot see
+* `AsyncEventPayloadIntegrationTests` — obtaining the failed event's payload best effort, so the
+  error handling service can display it
 
 ### Integration tests
 

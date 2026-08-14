@@ -265,6 +265,8 @@ protocol ModulithPublicationProcessingFailedEventProtocol {
     string eventType;     // fully qualified class name of the internal event
     string errorMessage;
     union{null, string} stackTrace = null;
+    union{null, bytes} serializedEvent = null;             // the event itself, best effort
+    union{null, string} serializedEventContentType = null; // e.g. "application/json"
   }
 
   record ModulithPublicationProcessingFailedEvent {
@@ -287,11 +289,12 @@ Why each payload field is there, and what was deliberately left out:
 | `eventType`    | Makes the error list readable and groupable without a lookup back into the application.                       |
 | `errorMessage` | An error report without a message is not actionable.                                                          |
 | `stackTrace`   | The Error Handling Service groups errors by a hash of the stack trace. Optional, because not every failure has a useful one. |
+| `serializedEvent` | What actually failed. Naming the event type is not enough for an operator to decide between retrying and discarding — they need to see the event. Optional, see [Carrying the event payload](#carrying-the-event-payload). |
+| `serializedEventContentType` | The serialization format is an application-side choice (Spring Modulith's `EventSerializer` is pluggable), so the Error Handling Service cannot assume how to render the bytes. |
 
-Left out on purpose, and addable later in a `BACKWARD`-compatible version if they turn out to be
-needed: `completionAttempts` (how often it already failed — informative, but not needed to act) and
-the serialized event (the receiving application still holds it in its own registry, and the Error
-Handling Service never needs to interpret it).
+Left out on purpose, and addable later in a `BACKWARD`-compatible version if it turns out to be
+needed: `completionAttempts`, how often the publication already failed — informative, but not needed
+to act on it.
 
 #### `RetryModulithPublicationCommand` and `DiscardModulithPublicationCommand`
 
@@ -338,6 +341,57 @@ Note the different base types: commands import `MessagingBaseTypes.avdl` (`AvroM
 
 The consuming application declares them with `@JeapMessageConsumerContract`.
 
+#### Carrying the event payload
+
+Naming the event type is not enough for an operator deciding between retrying and discarding — they
+need to see the event. The payload therefore travels with the failure event, as bytes plus a media
+type, exactly as `MessageProcessingFailedEvent` carries the original Kafka message. Bytes rather than
+a string because the Error Handling Service must be able to store and display it even when it cannot
+be parsed.
+
+**Where the payload comes from.** `TargetEventPublication` exposes the event as a *deserialized
+object*, not as the stored text, so the obvious route — `getEvent()` — depends on the event class
+still being loadable and its stored form still being deserializable. That is the one situation the
+feature must survive, since a deserialization failure is itself a reason processing fails.
+
+The clean way round it is Spring Modulith's own `EventSerializer`: the public bean that produced the
+stored form in the first place. On the proactive path the live event object is in hand — the async
+exception handler is called with it — so the bridge can serialize that object directly, with no
+database access and no deserialization anywhere. `AsyncEventPayloadIntegrationTests` asserts that
+doing so produces **exactly the bytes stored in `event_publication.serialized_event`**, so nothing is
+lost by taking this route instead of reading the column.
+
+```java
+byte[] payload = eventSerializer.serialize(event).toString().getBytes(UTF_8);
+```
+
+No JDBC is needed. It was considered as the fallback for reading the raw column without
+deserializing, and turned out to be unnecessary for the path that matters.
+
+**Best effort.** Obtaining the payload must never stop the failure from being reported, so every
+problem degrades instead of failing:
+
+| Situation                                                          | What the bridge sends                                            |
+|--------------------------------------------------------------------|--------------------------------------------------------------------|
+| Normal case                                                        | `serializedEvent` + `serializedEventContentType: application/json`  |
+| The event cannot be serialized (a property throws, a cycle, …)      | Both fields absent; the reason is logged, and nothing else changes  |
+| The payload exceeds 256 KB                                          | Truncated to 256 KB, content type still set                        |
+| Only the publication is available and `getEvent()` fails            | Both fields absent; the failure is still reported                   |
+
+256 KB is well under Kafka's 1 MB default maximum message size, which the failure event as a whole has
+to fit into. Truncated JSON no longer parses, so the Error Handling Service will show it as text —
+acceptable, because the alternative is showing nothing at all for exactly the large events that are
+most interesting when something went wrong.
+
+There is deliberately **no field explaining why a payload is missing**. An absent payload is a
+condition for the operator to notice, not to act on, and the reason belongs in the logs of the
+application that failed to produce it.
+
+**The two triggers differ here.** On the proactive path the live event is available and the payload is
+essentially always there. On the fallback sweep the bridge only has the publication, so it has to go
+through `getEvent()` and may end up with no payload — which is the right trade-off, because the sweep
+exists for cases where the process that held the event is gone.
+
 ### Escalation
 
 The primary path, driven by the async exception handler, escalates the moment the last attempt fails:
@@ -359,7 +413,7 @@ sequenceDiagram
     alt attempts < budget
         Note over BR: leave it - the retry policy will resubmit it
     else attempts >= budget and not escalated yet
-        BR->>ET: ModulithPublicationProcessingFailedEvent<br/>publicationId, listener, eventType,<br/>errorMessage, stackTrace
+        BR->>ET: ModulithPublicationProcessingFailedEvent<br/>publicationId, listener, eventType,<br/>errorMessage, stackTrace,<br/>serializedEvent (best effort)
         BR->>BR: record in escalated_publication
     end
     ET->>EHS: consume, persist, create manual task
@@ -474,6 +528,7 @@ registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier()
 | A retry policy, and the exhaustion seam            | `FailedEventPublicationResubmitter.onRetriesExhausted(…)`                |
 | Proof that the detect/escalate/retry/discard hooks work | `AsyncEventFailureHooksIntegrationTests`                             |
 | Proof that the proactive notification hook works   | `AsyncEventFailureNotificationIntegrationTests`                          |
+| Proof that the event payload can be obtained best effort | `AsyncEventPayloadIntegrationTests`                                |
 | End-to-end proof of retry and exhaustion           | `InternalAsyncEventRetryIT`                                              |
 | A running EHS and OAuth mock server to escalate to | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs`          |
 
