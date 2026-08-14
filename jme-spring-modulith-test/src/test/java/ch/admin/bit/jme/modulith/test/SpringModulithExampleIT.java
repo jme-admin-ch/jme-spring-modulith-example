@@ -4,7 +4,6 @@ import ch.admin.bit.jme.messaging.event.order.created.JmeOrderCreatedEvent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
@@ -17,8 +16,9 @@ import static org.awaitility.Awaitility.await;
  * <p>
  * The chain under test: an external {@code JmeOrderCreatedEvent} on Kafka is consumed by the
  * {@code messaging} module, which registers an order in the {@code order} module, which publishes an
- * internal {@code OrderCompleted} event, which the {@code inventory} and {@code notification} modules
- * pick up asynchronously through the Spring Modulith event publication registry.
+ * internal {@code OrderCompleted} event, which the {@code inventory}, {@code notification} and
+ * {@code shipping} modules pick up asynchronously through the Spring Modulith event publication
+ * registry.
  */
 class SpringModulithExampleIT extends SpringModulithExampleITBase {
 
@@ -39,14 +39,16 @@ class SpringModulithExampleIT extends SpringModulithExampleITBase {
 
         // The order module registers the order as soon as the event has been consumed...
         await().untilAsserted(() ->
-                assertThat(orderIdsOf("/api/orders", token)).contains(orderId));
+                assertThat(orderIdsOf(token, "/api/orders")).contains(orderId));
 
-        // ...and the two @ApplicationModuleListener methods run afterwards, asynchronously and each in
-        // its own transaction.
+        // ...and the three @ApplicationModuleListener methods run afterwards, asynchronously and each
+        // in its own transaction.
         await().untilAsserted(() ->
-                assertThat(orderIdsOf("/api/inventory", token)).contains(orderId));
+                assertThat(orderIdsOf(token, "/api/inventory")).contains(orderId));
         await().untilAsserted(() ->
-                assertThat(orderIdsOf("/api/notifications", token)).contains(orderId));
+                assertThat(orderIdsOf(token, "/api/notifications")).contains(orderId));
+        await().untilAsserted(() ->
+                assertThat(orderIdsOf(token, "/api/shipments")).contains(orderId));
     }
 
     @Test
@@ -67,9 +69,5 @@ class SpringModulithExampleIT extends SpringModulithExampleITBase {
     @Test
     void restApiAcceptsATokenWithTheRequiredSemanticRole() {
         get(accessToken(), "/api/orders").then().statusCode(200);
-    }
-
-    private List<String> orderIdsOf(String path, String token) {
-        return get(token, path).then().statusCode(200).extract().jsonPath().getList("orderId");
     }
 }

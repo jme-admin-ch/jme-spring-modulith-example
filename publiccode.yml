@@ -27,8 +27,8 @@ description:
       handed over to the jEAP Error Handling Service, and the REST API is protected by the jEAP
       security starter using semantic roles — one semantic resource per application module.
       It contains the following modules:
-      * jme-spring-modulith-scs: The Spring Modulith example service with its four application
-        modules order, inventory, notification and messaging
+      * jme-spring-modulith-scs: The Spring Modulith example service with its five application
+        modules order, inventory, notification, shipping and messaging
       * jme-spring-modulith-auth-scs: An instance of the jEAP OAuth mock server used as
         authorization server
       * jme-spring-modulith-error-scs: An instance of the jEAP Error Handling Service
@@ -36,6 +36,7 @@ description:
     features:
       - Demonstrates internal asynchronous events between application modules with @ApplicationModuleListener
       - Demonstrates the JDBC event publication registry and its at-least-once delivery guarantee
+      - Demonstrates the retry of an internal asynchronous event whose processing fails, and what happens when the retries are exhausted
       - Demonstrates consuming an external Kafka event and reporting failures to the jEAP Error Handling Service
       - Demonstrates authorization with jEAP semantic roles, one semantic resource per application module
       - Verifies the module boundaries at build time and generates module documentation

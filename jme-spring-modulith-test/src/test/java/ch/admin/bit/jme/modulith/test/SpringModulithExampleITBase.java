@@ -4,6 +4,8 @@ import ch.admin.bit.jeap.jme.test.BootServiceSpringIntegrationTestBase;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 
+import java.util.List;
+
 import static io.restassured.RestAssured.given;
 
 /**
@@ -66,5 +68,13 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
                 .accept(ContentType.JSON)
                 .when()
                 .get(path);
+    }
+
+    /**
+     * The order ids reported by one of the list endpoints, all of which return objects carrying an
+     * {@code orderId}.
+     */
+    List<String> orderIdsOf(String token, String path) {
+        return get(token, path).then().statusCode(200).extract().jsonPath().getList("orderId");
     }
 }

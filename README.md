@@ -16,7 +16,7 @@ service actually needs around it.
 The example consists of the following modules:
 
 * **jme-spring-modulith-scs**: The Spring Modulith service, with the application modules `order`,
-  `inventory`, `notification` and `messaging`
+  `inventory`, `notification`, `shipping` and `messaging`
 * **jme-spring-modulith-auth-scs**: An instance of the
   [jEAP OAuth mock server](https://github.com/jeap-admin-ch/jeap-oauth-mock-server) used as
   authorization server
@@ -41,8 +41,9 @@ nested package is internal and inaccessible to the other modules.
 ```
 ch.admin.bit.jme.modulith
 ├── order          owns the orders; publishes OrderCompleted
-├── inventory      reserves stock,       reacting to OrderCompleted
+├── inventory      reserves stock,        reacting to OrderCompleted
 ├── notification   records notifications, reacting to OrderCompleted
+├── shipping       hands over to carrier, reacting to OrderCompleted — and can fail doing so
 └── messaging      Kafka adapter: consumes JmeOrderCreatedEvent, calls the order module
 ```
 
@@ -63,14 +64,42 @@ reaches into another module's `internal` package, depends on a module it did not
 modules form a cycle. Without that test the package structure would be a convention; with it, it is
 enforced.
 
-The same test writes C4 and UML component diagrams plus a canvas per module to
-`jme-spring-modulith-scs/target/spring-modulith-docs`. At runtime, `/actuator/modulith` reports the
-module model of the running application.
+At runtime, `/actuator/modulith` reports the module model of the running application.
+
+### Generated documentation
+
+`DocumentationTests` generates the [Spring Modulith documentation](https://docs.spring.io/spring-modulith/reference/documentation.html)
+during the build, from the same module model the application runs on — so it cannot drift away from
+the code the way a hand-written architecture chapter does. After `./mvnw install` (or
+`./mvnw test -pl jme-spring-modulith-scs`) it can be inspected in
+`jme-spring-modulith-scs/target/spring-modulith-docs`:
+
+| File                    | Content                                                                                                                   |
+|-------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `components.puml`       | C4 component diagram of all modules and their relationships                                                               |
+| `module-<name>.puml`    | One diagram per module, showing it and its direct dependencies                                                            |
+| `module-<name>.adoc`    | The module canvas: Spring beans, aggregate roots, published events, events listened to, configuration properties          |
+| `all-docs.adoc`         | Aggregating document linking all diagrams and canvases                                                                    |
+
+For example, the canvas of the `inventory` module records that it listens to `OrderCompleted`
+asynchronously, without anybody having written that down:
+
+```asciidoc
+|Spring components
+|_Services_
+
+* `c.a.b.j.m.i.InventoryManagement`
+|Events listened to
+|* `c.a.b.j.m.o.OrderCompleted` (async)
+```
+
+The `.puml` files are PlantUML sources; render them with any PlantUML tooling to get images. The
+documentation is a local build output and is deliberately not published as a Maven artifact.
 
 ## Internal asynchronous events
 
-When an order is registered, the `order` module publishes an `OrderCompleted` event. The `inventory`
-and `notification` modules pick it up:
+When an order is registered, the `order` module publishes an `OrderCompleted` event. The `inventory`,
+`notification` and `shipping` modules pick it up:
 
 ```java
 @ApplicationModuleListener
@@ -79,20 +108,79 @@ void on(OrderCompleted event) { … }
 
 `@ApplicationModuleListener` is Spring Modulith's shortcut for
 `@Async @Transactional(REQUIRES_NEW) @TransactionalEventListener`: the listener runs on another
-thread, only after the publishing transaction has committed, and in a transaction of its own. The two
-listeners are unaware of each other — they run concurrently and one failing neither rolls back nor
-blocks the other.
+thread, only after the publishing transaction has committed, and in a transaction of its own. The
+three listeners are unaware of each other — they run concurrently and one failing neither rolls back
+nor blocks the others.
 
 Delivery is tracked in the **event publication registry** (`spring-modulith-starter-jdbc`). Before a
-listener is invoked, a row is written to `event_publication` and marked complete once the listener
-returns normally, so a listener that fails — or a service that dies mid-flight — leaves an incomplete
-publication that is republished on the next startup
-(`spring.modulith.events.republish-outstanding-publications-on-restart`). Because a publication can be
-replayed, the listeners are idempotent.
+listener is invoked, a row is written to `event_publication`; it is marked `COMPLETED` when the
+listener returns normally and `FAILED` when it throws. Publications left behind by an instance that
+died mid-flight are republished on the next startup
+(`spring.modulith.events.republish-outstanding-events-on-restart`), and the staleness monitor
+(`spring.modulith.events.staleness.*`) marks publications that got stuck in `PROCESSING` as `FAILED`
+so they become eligible for a retry. Because a publication can be replayed, the listeners are
+idempotent.
 
 The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-scs/src/main/resources/db/migration/V1__event_publication.sql)
 rather than by Spring Modulith itself, because it holds application state that outlives a restart and
 therefore deserves a migration history like any other table.
+
+### When processing an internal event fails
+
+The `shipping` module is the one that can fail: an order of type `FAIL_ASYNC` makes handing the
+shipment over to the carrier throw. The `inventory` and `notification` listeners of the very same
+event complete normally — each listener has its own row in `event_publication` and its own
+transaction.
+
+Spring Modulith persists failed publications but does not retry them on a schedule by itself: it
+offers `FailedEventPublications.resubmit(ResubmissionOptions)` and leaves the retry policy to the
+application. [`FailedEventPublicationResubmitter`](jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/FailedEventPublicationResubmitter.java)
+is that policy:
+
+```java
+@Scheduled(fixedDelayString = "${jme.modulith.event-resubmission.interval}")
+void resubmitFailedPublications() {
+    failedEventPublications.resubmit(ResubmissionOptions.defaults()
+            .withMinAge(minAge)
+            .withFilter(this::hasRetriesLeft));
+}
+```
+
+| Property                                              | Value | Meaning                                                                                        |
+|-------------------------------------------------------|-------|------------------------------------------------------------------------------------------------|
+| `jme.modulith.event-resubmission.interval`            | `5s`  | How often failed publications are looked at                                                     |
+| `jme.modulith.event-resubmission.min-age`             | `2s`  | How old a failed publication must be before it is retried                                       |
+| `jme.modulith.event-resubmission.max-completion-attempts` | `3` | Total invocations of the listener. Spring Modulith counts the initial one, so this is 1 + 2 retries |
+
+Each resubmission increments the publication's `completion_attempts`. Once the budget is used up the
+publication is left alone and stays `FAILED` in the registry. The values above are deliberately
+impatient so the behaviour is observable while trying out the example.
+
+### Planned: escalating exhausted retries to the error handling service
+
+Retries running out is where an internal asynchronous event needs the same treatment a failed Kafka
+message already gets. An error handling bridge for that is planned but **not implemented yet**:
+
+```
+Kafka event
+  → internal async event
+    → async event processor fails
+      → Spring Modulith resubmission          ← implemented (FailedEventPublicationResubmitter)
+        → retries exhausted                   ← implemented (onRetriesExhausted)
+          → bridge publishes ModulithPublicationProcessingFailedEvent      ← planned
+            → jEAP Error Handling Service                                  ← planned
+              → RetryModulithPublicationCommand / DiscardModulithPublicationCommand
+                → this application resubmits or discards the publication   ← planned
+```
+
+This example is the fixture for that feature: `FailedEventPublicationResubmitter.onRetriesExhausted(…)`
+is the seam the bridge will hook into, and the `shipping` module provides a failing listener that
+reliably drives a publication into that state. Today the method only reports the failure.
+
+Note that this is a **different path** from the one the `messaging` module takes. A Kafka message whose
+consumption fails synchronously is escalated to the error handling service by the jEAP error handler
+right away and never reaches the event publication registry — see [Error handling](#error-handling)
+below.
 
 ## Security: one semantic role per application module
 
@@ -110,6 +198,7 @@ are exactly its module boundaries:
 | `POST /api/demo/orders`                     | `hasRole('order', 'write')`        | `jme_@order_#write`        |
 | `GET /api/inventory`                        | `hasRole('inventory', 'read')`     | `jme_@inventory_#read`     |
 | `GET /api/notifications`                    | `hasRole('notification', 'read')`  | `jme_@notification_#read`  |
+| `GET /api/shipments`, `/api/shipments/attempts` | `hasRole('shipping', 'read')`  | `jme_@shipping_#read`      |
 
 Reading and writing are separate operations of the same resource, and a token for the `order` resource
 grants nothing on the `inventory` one — `OrderApiSecurityTests` asserts both.
@@ -186,6 +275,7 @@ which publishes `OrderCompleted`, which the two other modules pick up asynchrono
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/orders
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/inventory
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/notifications
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/shipments
 ```
 
 The event publication registry shows one completed row per listener:
@@ -201,6 +291,33 @@ docker compose -f docker/docker-compose.yml exec jme-spring-modulith-db-local \
 -----------------------------------------------------------------------------------+-----------
  ...inventory.InventoryManagement.on(...order.OrderCompleted)                       | COMPLETED
  ...notification.NotificationManagement.on(...order.OrderCompleted)                 | COMPLETED
+```
+
+### A failing internal asynchronous event
+
+An order of type `FAIL_ASYNC` is consumed from Kafka without trouble and registered, but the
+`shipping` listener of the resulting `OrderCompleted` event throws:
+
+```shell
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-3&orderType=FAIL_ASYNC"
+```
+
+Watch the listener being retried, and stopping after the third attempt:
+
+```shell
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8090/jme-spring-modulith-scs/api/shipments/attempts
+# {"demo-3":1} … {"demo-3":2} … {"demo-3":3}  and then no further
+```
+
+The other two listeners of the same event were not affected, and the registry shows exactly that —
+two `COMPLETED` rows and one `FAILED` row that has used up its attempts:
+
+```shell
+docker compose -f docker/docker-compose.yml exec jme-spring-modulith-db-local \
+  psql -U modulith -d jme-spring-modulith-db-local \
+  -c "select listener_id, status, completion_attempts from event_publication;"
 ```
 
 ### The module model at runtime
@@ -285,7 +402,8 @@ be pointed at it.
 
 `./mvnw test -pl jme-spring-modulith-scs` runs, against a PostgreSQL started by Testcontainers:
 
-* `ModularityTests` — verifies the module arrangement and writes the module documentation
+* `ModularityTests` — verifies the module arrangement
+* `DocumentationTests` — generates the module documentation described above
 * `OrderIntegrationTests`, `InventoryIntegrationTests` — `@ApplicationModuleTest` slices that bootstrap
   a single module. A hidden dependency on another module shows up here as a missing bean rather than
   passing unnoticed.
@@ -295,8 +413,15 @@ be pointed at it.
 ### Integration tests
 
 `jme-spring-modulith-test` starts the infrastructure through Spring Boot's Docker Compose support and
-the three services as Maven subprocesses, then exercises the running system. The tests are named
-`*IT` and therefore run in the `verify` phase:
+the three services as Maven subprocesses, then exercises the running system:
+
+* `SpringModulithExampleIT` — the happy path from the Kafka event through to all three listeners, and
+  the semantic role authorization
+* `ErrorHandlingIT` — the two Kafka consumption failures escalated to the error handling service
+* `InternalAsyncEventRetryIT` — the failing internal asynchronous event, its retries and their
+  exhaustion
+
+The tests are named `*IT` and therefore run in the `verify` phase:
 
 ```shell
 # Build and install all local modules
