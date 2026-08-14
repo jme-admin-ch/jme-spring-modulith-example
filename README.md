@@ -26,6 +26,11 @@ The example consists of the following modules:
 This repository is platform-agnostic: it contains the example services and publishes them as Maven
 artifacts that platform-specific (non-public) deployments build on top of.
 
+Deeper documentation lives in [docs/](docs/README.md): the
+[architecture](docs/architecture.md) of the example, a [configuration reference](docs/configuration.md),
+and the design for the planned
+[error handling of failed internal asynchronous events](docs/async-event-error-handling-design.md).
+
 ## Changes
 
 This project is versioned using [Semantic Versioning](http://semver.org/) and all changes are
@@ -176,6 +181,11 @@ Kafka event
 This example is the fixture for that feature: `FailedEventPublicationResubmitter.onRetriesExhausted(…)`
 is the seam the bridge will hook into, and the `shipping` module provides a failing listener that
 reliably drives a publication into that state. Today the method only reports the failure.
+
+`AsyncEventFailureHooksIntegrationTests` proves the Spring Modulith hooks that design depends on —
+detecting a failed publication, inspecting it without resubmitting it, retrying a single publication by
+identifier, and discarding one without invoking the listener. The design is written up in
+[docs/async-event-error-handling-design.md](docs/async-event-error-handling-design.md).
 
 Note that this is a **different path** from the one the `messaging` module takes. A Kafka message whose
 consumption fails synchronously is escalated to the error handling service by the jEAP error handler
@@ -409,6 +419,8 @@ be pointed at it.
   passing unnoticed.
 * `OrderApiSecurityTests` — drives the REST API through MockMvc with tokens built by
   `JeapAuthenticationTestTokenBuilder`
+* `AsyncEventFailureHooksIntegrationTests` — the Spring Modulith hooks for detecting, retrying and
+  discarding a failed event publication, which the planned error handling bridge will build on
 
 ### Integration tests
 
