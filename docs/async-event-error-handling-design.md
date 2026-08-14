@@ -520,6 +520,39 @@ Whichever way the command arrives, the application-side effect is one call, hook
 registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier());
 ```
 
+#### What discarding actually changes
+
+That single call is easy to mistake for bookkeeping. It is not — without it an exhausted publication
+is effectively immortal:
+
+| Effect                                                | Established by                                                                 |
+|-------------------------------------------------------|----------------------------------------------------------------------------------|
+| It is no longer resubmitted                           | Asserted: after `markCompleted`, a blanket `resubmit(ResubmissionOptions.defaults())` does not invoke the listener again |
+| It leaves the incomplete set                          | Asserted: `findIncompletePublications()` no longer returns it                     |
+| It is no longer replayed on restart                   | Follows from the mechanism, see below                                             |
+| It becomes eligible for housekeeping                  | `CompletedEventPublications.deletePublicationsOlderThan(…)` only sees completed publications |
+
+The third is the one that matters most in operation. With
+`spring.modulith.events.republish-outstanding-events-on-restart` enabled — as in this example — every
+restart republishes all *outstanding* publications, and a `FAILED` publication is outstanding, because
+it has no completion date. Restart republication does not consult the retry policy's budget, so a
+publication that has long exhausted its retries is invoked again on every single deployment, fails
+again, and climbs another completion attempt. Discarding is what ends that cycle.
+
+Two things it deliberately does not do:
+
+**It does not record *why* it ended.** Spring Modulith's status model is `PUBLISHED`, `PROCESSING`,
+`COMPLETED`, `FAILED`, `RESUBMITTED` — there is no `ABANDONED`. Marking a publication completed
+therefore makes it indistinguishable from one that genuinely succeeded, and the fact that it was given
+up on has to be recorded elsewhere: in the Error Handling Service's own audit log, or alongside the
+`escalated_publication` row. Worth deciding deliberately when the starter is built, because after the
+fact the information is simply gone. (Deleting the row instead of completing it is worse: it loses the
+publication entirely.)
+
+**It does not undo anything.** Discarding stops delivery; it is not a compensating action. The failed
+listener's own transaction was already rolled back, but anything it did outside that transaction — a
+call to another system, a file written — stays done. "Discard" means *stop trying*, never *clean up*.
+
 ## What the example provides for this
 
 | Piece                                              | Where                                                                    |
