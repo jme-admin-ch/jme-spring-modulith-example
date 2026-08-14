@@ -102,63 +102,163 @@ for its own schedulers.
 
 ## Proposed design
 
-### Reuse `MessageProcessingFailedEvent`
+### How the failure reaches the Error Handling Service
 
-The obvious move is to invent a `ModulithPublicationProcessingFailedEvent`. The cheaper one is to
-reuse the contract the EHS already consumes, because of how its retry works.
+There are two ways to tell the EHS that a publication has failed, and the choice decides how much
+platform work the feature costs.
 
-The EHS stores the causing message as **raw bytes** together with a topic name, and a resend
-republishes those bytes unchanged to that topic. It never interprets them. So if the bridge reports
-the failure with:
+**Option 1 — reuse `MessageProcessingFailedEvent`.** The EHS stores the causing message as **raw
+bytes** together with a topic name, and a resend republishes those bytes unchanged to that topic. It
+never interprets them. So if the bridge reports the failure with `payload.originalMessage` set to the
+Avro-serialized `RetryModulithPublicationCommand` and `references.message.topicName` set to a command
+topic this application consumes, the EHS's existing resend delivers exactly that command to exactly
+this application — with **no change to the EHS at all**. The price is a failure report that lies a
+little: `MessageReference` requires a `partition` and an `offset` the bridge does not have, so they
+have to be filled with a sentinel and ignored everywhere, and the error list shows a Kafka message
+that never existed.
 
-- `payload.originalMessage` = the Avro-serialized **`RetryModulithPublicationCommand`**, and
-- `references.message.topicName` = a command topic **this application consumes**,
+**Option 2 — a dedicated `ModulithPublicationProcessingFailedEvent`.** The EHS has to learn a second
+inbound contract, a second error intake path and a second notion of what "resend" means. In exchange
+the failure report says what it means — a publication, a listener and an event type — and an operator
+reading the error list sees a Modulith publication rather than a synthetic Kafka message.
 
-then the EHS's existing resend — whether triggered by an operator in the UI or by the resending
-strategy — delivers exactly that command to exactly this application. **No change to the EHS is
-required for the retry path.**
+**Decision: option 2.** The message types are defined and building (see below), so the platform work
+is the remaining part. The reasoning is that this feature is aimed at operators, and an error list
+they can read is worth more than the intake code it saves; a sentinel partition and offset would also
+be a trap for anyone later writing a query or a report over the EHS data.
 
-The alternative, a dedicated event type, means teaching the EHS a second inbound contract, a second
-error intake path and a second notion of what "resend" means. It buys a cleaner name and a cleaner
-audit trail in the EHS. Recommended only if the reuse above turns out to confuse operators looking at
-the error list.
-
-Two details of the reuse are not free:
-
-- `MessageReference` requires `partition` and `offset`, and the bridge has neither. They have to be
-  filled with a sentinel (`"-1"`) and must not be interpreted anywhere.
-- The failure is reported with temporality `PERMANENT`, because the application has already exhausted
-  its own retries. The EHS therefore goes straight to a manual task instead of scheduling a resend,
-  which is the intended behaviour.
+Either way, the failure is reported with temporality `PERMANENT`, because the application has already
+exhausted its own retries. The EHS therefore goes straight to a manual task instead of scheduling a
+resend of its own, which is the intended behaviour.
 
 ### Message contracts
 
-Two new message types in the
-[jme message type registry](https://github.com/jme-admin-ch/jme-message-type-registry), both consumed
-by this application and declared with `@JeapMessageConsumerContract`:
+The three message types are defined in the **jEAP common message type registry** rather than in a
+system registry, because the feature is a platform feature: any jEAP system running a Spring Modulith
+application needs them. They are on the branch
+`feature/JEAP-7446-modulith-publication-messages` of
+[`jeap-message-type-registry`](https://github.com/jeap-admin-ch/jeap-message-type-registry), where the
+validation build compiles and publishes them as
+
+| Type                                       | Artifact id (group `ch.admin.bit.jeap.messagetype.jeap`) |
+|--------------------------------------------|----------------------------------------------------------|
+| `ModulithPublicationProcessingFailedEvent` | `modulith-publication-processing-failed-event`           |
+| `RetryModulithPublicationCommand`          | `retry-modulith-publication-command`                     |
+| `DiscardModulithPublicationCommand`        | `discard-modulith-publication-command`                   |
+
+All three identify the failed processing by the **publication id** — the id of the row in the Spring
+Modulith event publication registry. That row is one listener's delivery of one event, which is exactly
+the unit that can be retried or discarded, so nothing else is needed to act on it.
+
+#### `ModulithPublicationProcessingFailedEvent`
+
+Reported by the bridge once a publication has exhausted the application's retries. Everything on it
+beyond the publication id exists so that a human looking at the error list can decide what to do.
 
 ```text
-@namespace("ch.admin.bit.jme.messaging.command.modulithpublication")
-protocol ModulithPublicationCommandProtocol {
+@namespace("ch.admin.bit.jeap.modulith.event.publicationprocessingfailed")
+protocol ModulithPublicationProcessingFailedEventProtocol {
+  import idl "DomainEventBaseTypes.avdl";
 
-    record ModulithPublicationReferences {
-        // the event_publication.id of the failed publication
-        string publicationId;
-    }
+  record ModulithPublicationReference {
+    string type = "modulithPublication";
+    string publicationId;
+  }
 
-    record RetryModulithPublicationPayload {
-        // fully qualified listener signature, for traceability
-        string listener;
-        string eventType;
-    }
+  record ModulithPublicationProcessingFailedReferences {
+    ModulithPublicationReference publication;
+  }
 
-    record RetryModulithPublicationCommand { … }
-    record DiscardModulithPublicationCommand { … }
+  record ModulithPublicationProcessingFailedPayload {
+    string listener;      // fully qualified signature of the listener method
+    string eventType;     // fully qualified class name of the internal event
+    string errorMessage;
+    union{null, string} stackTrace = null;
+  }
+
+  record ModulithPublicationProcessingFailedEvent {
+    ch.admin.bit.jeap.domainevent.avro.AvroDomainEventIdentity identity;
+    ch.admin.bit.jeap.domainevent.avro.AvroDomainEventType type;
+    ch.admin.bit.jeap.domainevent.avro.AvroDomainEventPublisher publisher;
+    ModulithPublicationProcessingFailedReferences references;
+    ModulithPublicationProcessingFailedPayload payload;
+    string domainEventVersion;
+    string? processId = null;
+  }
 }
 ```
 
-The publication `UUID` is the whole key: it identifies one listener's delivery of one event, which is
-precisely the unit that can be retried or discarded.
+Why each payload field is there, and what was deliberately left out:
+
+| Field          | Why it is necessary                                                                                      |
+|----------------|------------------------------------------------------------------------------------------------------------|
+| `listener`     | One event is delivered to several listeners, each with its own publication. The id alone does not tell a human *which* processing step broke. |
+| `eventType`    | Makes the error list readable and groupable without a lookup back into the application.                       |
+| `errorMessage` | An error report without a message is not actionable.                                                          |
+| `stackTrace`   | The Error Handling Service groups errors by a hash of the stack trace. Optional, because not every failure has a useful one. |
+
+Left out on purpose, and addable later in a `BACKWARD`-compatible version if they turn out to be
+needed: `completionAttempts` (how often it already failed — informative, but not needed to act) and
+the serialized event (the receiving application still holds it in its own registry, and the Error
+Handling Service never needs to interpret it).
+
+#### `RetryModulithPublicationCommand` and `DiscardModulithPublicationCommand`
+
+Both are the same shape, and both carry nothing but the reference — retrying needs no data beyond
+knowing *what* to retry, because the event itself is still in the receiving application's registry.
+
+```text
+@namespace("ch.admin.bit.jeap.modulith.command.retrypublication")
+protocol RetryModulithPublicationCommandProtocol {
+  import idl "MessagingBaseTypes.avdl";
+
+  record ModulithPublicationReference {
+    string type = "modulithPublication";
+    string publicationId;
+  }
+
+  record RetryModulithPublicationCommandReferences {
+    ModulithPublicationReference publication;
+  }
+
+  record RetryModulithPublicationCommandPayload {
+  }
+
+  record RetryModulithPublicationCommand {
+    ch.admin.bit.jeap.messaging.avro.AvroMessageIdentity identity;
+    ch.admin.bit.jeap.messaging.avro.AvroMessageType type;
+    ch.admin.bit.jeap.messaging.avro.AvroMessagePublisher publisher;
+    RetryModulithPublicationCommandReferences references;
+    RetryModulithPublicationCommandPayload payload;
+    string? processId = null;
+    string commandVersion;
+  }
+}
+```
+
+`DiscardModulithPublicationCommand` is identical with `Discard` in place of `Retry` and the namespace
+`ch.admin.bit.jeap.modulith.command.discardpublication`. Why a publication was given up on is recorded
+by the Error Handling Service the decision was taken in — the command does not carry a reason, because
+nothing on the receiving side would do anything with it.
+
+Note the different base types: commands import `MessagingBaseTypes.avdl` (`AvroMessage*`,
+`commandVersion`) and events import `DomainEventBaseTypes.avdl` (`AvroDomainEvent*`,
+`domainEventVersion`). That split is the convention throughout the registry, not a choice made here.
+
+The consuming application declares them with `@JeapMessageConsumerContract`.
+
+#### Consequence for the failure report
+
+Defining `ModulithPublicationProcessingFailedEvent` settles the question raised above in favour of a
+**dedicated event type**: the Error Handling Service has to learn this contract as a second way for a
+failure to arrive. That is more platform work than reusing `MessageProcessingFailedEvent` would have
+been, and it buys a failure report that says what it means — a publication, a listener and an event
+type, instead of a synthetic Kafka message reference with a sentinel partition and offset — plus an
+error list an operator can actually read.
+
+The retry route is unaffected by that choice: whichever event carries the failure, the Error Handling
+Service ends up publishing a `RetryModulithPublicationCommand` to the command topic, and the receiving
+application resubmits the publication by id.
 
 ### Escalation
 
@@ -178,8 +278,7 @@ sequenceDiagram
         BR->>REG: processFailedPublications(attempts >= max)
         REG-->>BR: TargetEventPublication
         alt not escalated yet
-            BR->>BR: build RetryModulithPublicationCommand(publicationId)
-            BR->>ET: MessageProcessingFailedEvent<br/>originalMessage = the command<br/>topicName = jme-modulith-publication-command<br/>temporality = PERMANENT
+            BR->>ET: ModulithPublicationProcessingFailedEvent<br/>publicationId, listener, eventType,<br/>errorMessage, stackTrace
             BR->>BR: record in escalated_publication
         end
     end
@@ -254,7 +353,8 @@ registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier()
 | A running EHS and OAuth mock server to escalate to | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs`          |
 
 Implementing the bridge should not require changing any of them — only adding the bridge, the command
-consumer, the `escalated_publication` table and the two message types.
+consumer, the `escalated_publication` table, and the Error Handling Service support for the three
+message types that are already defined.
 
 ## Open questions
 
