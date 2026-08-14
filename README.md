@@ -26,10 +26,13 @@ The example consists of the following modules:
 This repository is platform-agnostic: it contains the example services and publishes them as Maven
 artifacts that platform-specific (non-public) deployments build on top of.
 
-Deeper documentation lives in [docs/](docs/README.md): the
-[architecture](docs/architecture.md) of the example, a [configuration reference](docs/configuration.md),
-and the design for the planned
-[error handling of failed internal asynchronous events](docs/async-event-error-handling-design.md).
+This README is the entry point. Deeper documentation lives in `docs/`:
+
+| Page                                                                            | Content                                                                                                                |
+|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| [Architecture](docs/architecture.md)                                            | The application modules, how a message travels through the system, and the two failure paths                             |
+| [Configuration](docs/configuration.md)                                          | Every property, port, topic, role and client the example uses, and why                                                   |
+| [Design: async event error handling](docs/async-event-error-handling-design.md) | Design for the **planned** bridge that escalates failed internal asynchronous events to the jEAP Error Handling Service |
 
 ## Changes
 
