@@ -58,12 +58,17 @@ These were established by running them, not by reading the reference documentati
 [`AsyncEventFailureHooksIntegrationTests`](../jme-spring-modulith-scs/src/test/java/ch/admin/bit/jme/modulith/AsyncEventFailureHooksIntegrationTests.java),
 which drives a real failing listener against a real PostgreSQL and asserts each of them.
 
-| # | Need              | API                                                                                          | Bean                        |
-|---|-------------------|----------------------------------------------------------------------------------------------|-----------------------------|
-| 1 | Detect            | `EventPublicationRegistry.findIncompletePublications()`                                        | `EventPublicationRegistry`  |
-| 2 | Escalate          | `EventPublicationRegistry.processFailedPublications(ResubmissionOptions, Consumer<TargetEventPublication>)` | `EventPublicationRegistry`  |
-| 3 | Retry one         | `FailedEventPublications.resubmit(ResubmissionOptions.defaults().withFilter(byIdentifier))`     | `FailedEventPublications`   |
-| 4 | Discard one       | `EventPublicationRegistry.markCompleted(event, targetIdentifier)`                               | `EventPublicationRegistry`  |
+| # | Need                    | API                                                                                          | Bean                        |
+|---|-------------------------|----------------------------------------------------------------------------------------------|-----------------------------|
+| 1 | Detect (by polling)     | `EventPublicationRegistry.findIncompletePublications()`                                        | `EventPublicationRegistry`  |
+| 2 | Escalate                | `EventPublicationRegistry.processFailedPublications(ResubmissionOptions, Consumer<TargetEventPublication>)` | `EventPublicationRegistry`  |
+| 3 | Retry one               | `FailedEventPublications.resubmit(ResubmissionOptions.defaults().withFilter(byIdentifier))`     | `FailedEventPublications`   |
+| 4 | Discard one             | `EventPublicationRegistry.markCompleted(event, targetIdentifier)`                               | `EventPublicationRegistry`  |
+| 5 | Be told, without polling | `AsyncUncaughtExceptionHandler.handleUncaughtException(Throwable, Method, Object...)`          | Spring, via `AsyncConfigurer` |
+
+Hook 5 is asserted separately by
+[`AsyncEventFailureNotificationIntegrationTests`](../jme-spring-modulith-scs/src/test/java/ch/admin/bit/jme/modulith/AsyncEventFailureNotificationIntegrationTests.java);
+see [Being told instead of polling](#being-told-instead-of-polling).
 
 Three findings matter for the design:
 
@@ -85,40 +90,109 @@ A `TargetEventPublication` carries everything an error report needs: the publica
 object, the `PublicationTargetIdentifier` of the listener (its fully qualified method signature), the
 status, the completion attempts, the publication date and the last resubmission date.
 
-## Where the bridge is invoked
+## Being told instead of polling
 
-The bridge ships as a jEAP starter (J-001), so it has to find failed publications through public
-Spring Modulith API rather than through anything a particular application does. Three candidate
-trigger points, all viable:
+The first question to settle is whether the bridge has to *poll* the event publication registry, or
+whether it can be *told* when a publication has failed. Both work; the proactive route is better and
+is available, but it does not cover every case on its own.
 
-| Option                                                                     | Pro                                                                         | Con                                                                                |
-|----------------------------------------------------------------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------|
-| **A** In the retry policy, at exhaustion (`FailedEventPublicationResubmitter.onRetriesExhausted`) | Simplest; the moment is known exactly                                       | Couples escalation to the application's own retry policy; only fires while the scheduler runs |
-| **B** A separate scheduled bridge using `processFailedPublications` with a filter on `completionAttempts >= N` | Retry policy and escalation policy stay independent; picks up anything failed, whatever put it there | One more scheduled job                                                             |
-| **C** Nothing extra — rely on B to pick up what the staleness monitor and restart republication produce | No code at all beyond B                                                     | Not a trigger of its own, only a source of failed publications                       |
+### There is no "publication failed" application event
 
-**Recommendation: B**, with A left in place as the seam it is today. B is more robust because a
-publication can become `FAILED` in ways the retry policy never sees — the staleness monitor marking a
-publication abandoned by a crashed instance, or an operator marking one failed by hand — and B catches
-those too.
+Spring Modulith does not publish one. The events API has no failure event type at all — the only
+event it defines is `EventExternalized`, for a different purpose. So there is nothing to
+`@EventListener` on.
 
-**Escalation must be idempotent.** `completion_attempts` records retries, not escalations, so nothing
-in `event_publication` remembers that a failure was already reported. The in-memory `Set<UUID>` in
-`FailedEventPublicationResubmitter` is enough to stop log spam in one process but is *not* a basis for
-publishing events: it is lost on restart and not shared between instances. The bridge needs a small
-table of its own, e.g.
+### But Spring does notify, through the async exception handler
 
-```sql
-CREATE TABLE escalated_publication
-(
-    publication_id UUID PRIMARY KEY,
-    error_event_id TEXT                     NOT NULL,
-    escalated_at   TIMESTAMP WITH TIME ZONE NOT NULL
-);
+`@ApplicationModuleListener` is `@Async`, so a listener that throws goes through Spring's async
+infrastructure, which hands the exception to the `AsyncUncaughtExceptionHandler`. That is a plain
+Spring extension point: contribute an `AsyncConfigurer` and the default
+`SimpleAsyncUncaughtExceptionHandler` (which only logs) is replaced.
+
+```java
+@Bean
+AsyncConfigurer asyncConfigurer(ModulithPublicationEscalation escalation) {
+    return new AsyncConfigurer() {
+        @Override
+        public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+            return (exception, method, params) -> escalation.onListenerFailed(exception, method, params[0]);
+        }
+    };
+}
 ```
 
-and, with more than one instance, ShedLock around the scheduled job — the same pattern the EHS uses
-for its own schedulers.
+Two things make it usable as the trigger, both asserted in
+`AsyncEventFailureNotificationIntegrationTests`:
+
+- The handler is called with the **failing listener method** and the **event**, which together
+  identify the publication.
+- By the time it runs, Spring Modulith has **already marked the publication `FAILED`**.
+  `CompletionRegisteringAdvisor` does that before letting the exception escape, so the handler can
+  read the publication's current `completionAttempts` and decide whether this was the last attempt.
+
+And one thing limits it, also asserted there:
+
+- It fires on **every failed attempt, including every retry** — it says "this attempt failed", never
+  "this publication is now given up on". Deciding that the retry budget is used up is the handler's
+  job, from the attempt count it can read.
+
+> A more precise alternative exists: `CompletionRegisteringAdvisor` calls
+> `EventPublicationRegistry.markFailed(...)`, so decorating that bean with a `BeanPostProcessor` gives
+> a callback on exactly the state transition. It was not chosen: the registry bean is declared as the
+> concrete `DefaultEventPublicationRegistry`, which also implements `CompletedEventPublications`, so a
+> decorator has to keep all of that intact — a lot of coupling to Spring Modulith internals for
+> information the public async handler already provides.
+
+### What the proactive hook cannot see
+
+The handler only fires when a listener actually ran and threw, in a live process. It misses:
+
+| Case                                                                       | Why the handler never fires                                              |
+|----------------------------------------------------------------------------|----------------------------------------------------------------------------|
+| The instance dies while a listener is running                              | No exception is thrown anywhere; the publication is left `PROCESSING` and only the staleness monitor turns it into `FAILED`, later, with nobody watching |
+| The instance dies between the failure and the escalation                   | The handler ran, but the escalation never got out                          |
+| Publishing the escalation itself fails (Kafka unavailable)                 | The trigger is gone; nothing will bring it back                            |
+| A publication became `FAILED` some other way (an operator, a future API)   | Nothing invoked a listener, so nothing threw                               |
+
+Each of these ends in the same state: a `FAILED` publication with its retry budget used up and no
+error in the Error Handling Service. None of them is exotic — the first is just "a pod was
+restarted".
+
+### Recommendation: proactive first, a sweep as the safety net
+
+```mermaid
+flowchart TB
+    L["listener throws"] --> H["AsyncUncaughtExceptionHandler<br/><b>primary, immediate</b>"]
+    H --> Q{"completionAttempts<br/>&gt;= budget?"}
+    Q -- no --> W["leave it to the retry policy"]
+    Q -- yes --> E["escalate once"]
+
+    C["instance crashed,<br/>escalation lost,<br/>Kafka was down"] --> S["scheduled sweep<br/><b>fallback, infrequent</b>"]
+    S --> F["processFailedPublications:<br/>FAILED, budget used up,<br/>not yet escalated"]
+    F --> E
+
+    E --> D[("escalated_publication")]
+```
+
+The **primary** trigger is the async exception handler: escalation happens in the same instant the
+last attempt fails, with no polling delay and no scheduled job in the common case.
+
+The **fallback** is a scheduled sweep over `processFailedPublications`, looking for publications that
+are `FAILED`, old enough, have used up their budget, and are not yet in `escalated_publication`. It
+exists only to catch what the handler structurally cannot see, so it can run infrequently — minutes,
+not seconds. It is the same mechanism the design would have used as the primary trigger, just demoted
+and slowed down.
+
+This is why `escalated_publication` (below) is not optional: with two paths that can both reach the
+same publication, the table is what makes escalation happen exactly once. The in-memory `Set<UUID>`
+in `FailedEventPublicationResubmitter` is not a substitute — it is lost on restart, which is precisely
+the situation the fallback exists for.
+
+For completeness, the sweep-only variant remains viable if the extra moving part is unwelcome: drop
+the handler, run the sweep every few seconds and accept the latency. It is simpler, and it is what the
+example's `FailedEventPublicationResubmitter` already demonstrates in miniature. The proactive hook is
+recommended because escalating a failure minutes after it happened is a poor experience for the
+operator waiting to act on it.
 
 ## Proposed design
 
@@ -266,28 +340,75 @@ The consuming application declares them with `@JeapMessageConsumerContract`.
 
 ### Escalation
 
+The primary path, driven by the async exception handler, escalates the moment the last attempt fails:
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant SHI as failing listener
     participant REG as event_publication
-    participant BR as bridge (scheduled)
+    participant AH as AsyncUncaughtExceptionHandler
+    participant BR as escalation
     participant ET as jme-messageprocessing-failed
     participant EHS as Error Handling Service
 
-    SHI--xREG: throws → FAILED
-    Note over REG,BR: FailedEventPublicationResubmitter retries<br/>until completion_attempts == max
-
-    loop scheduled
-        BR->>REG: processFailedPublications(attempts >= max)
-        REG-->>BR: TargetEventPublication
-        alt not escalated yet
-            BR->>ET: ModulithPublicationProcessingFailedEvent<br/>publicationId, listener, eventType,<br/>errorMessage, stackTrace
-            BR->>BR: record in escalated_publication
-        end
+    SHI--xREG: throws → markFailed, attempts++
+    REG-->>AH: exception escapes to the async infrastructure
+    AH->>BR: onListenerFailed(exception, method, event)
+    BR->>REG: look up the publication for (event, listener)
+    alt attempts < budget
+        Note over BR: leave it - the retry policy will resubmit it
+    else attempts >= budget and not escalated yet
+        BR->>ET: ModulithPublicationProcessingFailedEvent<br/>publicationId, listener, eventType,<br/>errorMessage, stackTrace
+        BR->>BR: record in escalated_publication
     end
     ET->>EHS: consume, persist, create manual task
 ```
+
+The fallback sweep runs the same escalation for anything the handler could not see — a publication
+left behind by a crashed instance, or one whose escalation never got out:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant BR as escalation sweep (scheduled)
+    participant REG as event_publication
+    participant ET as jme-messageprocessing-failed
+
+    loop every few minutes
+        BR->>REG: processFailedPublications(FAILED, attempts >= budget, min age)
+        REG-->>BR: TargetEventPublication
+        alt not in escalated_publication
+            BR->>ET: ModulithPublicationProcessingFailedEvent
+            BR->>BR: record in escalated_publication
+        end
+    end
+```
+
+#### Escalating exactly once
+
+Two triggers can reach the same publication, and neither `event_publication` nor the
+`completion_attempts` counter records that a failure was already reported. The bridge therefore needs
+a small table of its own — this is what makes the two paths safe together:
+
+```sql
+CREATE TABLE escalated_publication
+(
+    publication_id UUID PRIMARY KEY,
+    error_event_id TEXT                     NOT NULL,
+    escalated_at   TIMESTAMP WITH TIME ZONE NOT NULL
+);
+```
+
+Inserting the row in the same transaction that publishes the event, and treating a primary-key
+violation as "already escalated", makes the escalation idempotent across both triggers, across
+restarts and across instances. The in-memory `Set<UUID>` in `FailedEventPublicationResubmitter` is
+enough to stop log spam in one process but is *not* a basis for publishing events: it is lost on
+restart, which is exactly the situation the fallback sweep exists for.
+
+With more than one instance, the sweep additionally needs ShedLock so that only one instance runs it
+— the same pattern the Error Handling Service uses for its own schedulers. The async handler needs no
+such coordination: it only ever runs on the instance whose listener failed.
 
 ### Retry
 
@@ -351,7 +472,8 @@ registry.markCompleted(publication.getEvent(), publication.getTargetIdentifier()
 |----------------------------------------------------|--------------------------------------------------------------------------|
 | A listener that fails on demand                    | `shipping` module, order type `FAIL_ASYNC`                               |
 | A retry policy, and the exhaustion seam            | `FailedEventPublicationResubmitter.onRetriesExhausted(…)`                |
-| Proof that the four hooks work                     | `AsyncEventFailureHooksIntegrationTests`                                 |
+| Proof that the detect/escalate/retry/discard hooks work | `AsyncEventFailureHooksIntegrationTests`                             |
+| Proof that the proactive notification hook works   | `AsyncEventFailureNotificationIntegrationTests`                          |
 | End-to-end proof of retry and exhaustion           | `InternalAsyncEventRetryIT`                                              |
 | A running EHS and OAuth mock server to escalate to | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs`          |
 
@@ -365,9 +487,9 @@ is meant to pick up.
 
 ## Open questions
 
-- **Multiple instances.** The bridge job needs ShedLock, otherwise two instances escalate the same
-  publication twice. The command consumer does not: `markResubmitted` refuses to claim a publication
-  that is already `RESUBMITTED`, so a duplicated command is harmless.
+- **The command consumer needs no coordination.** Unlike the escalation sweep it does not need
+  ShedLock: `markResubmitted` refuses to claim a publication that is already `RESUBMITTED`, so a
+  duplicated retry command is harmless.
 - **Serialization.** The event inside the publication is serialized by Spring Modulith's own
   `EventSerializer` (Jackson by default), which is unrelated to the Avro serialization of the command.
   The bridge only needs the publication id, so it never has to deserialize the event — but an error

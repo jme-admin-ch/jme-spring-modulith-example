@@ -185,9 +185,11 @@ This example is the fixture for that feature: `FailedEventPublicationResubmitter
 is the seam the bridge will hook into, and the `shipping` module provides a failing listener that
 reliably drives a publication into that state. Today the method only reports the failure.
 
-`AsyncEventFailureHooksIntegrationTests` proves the Spring Modulith hooks that design depends on —
-detecting a failed publication, inspecting it without resubmitting it, retrying a single publication by
-identifier, and discarding one without invoking the listener. The design is written up in
+Two tests prove the hooks that design depends on, rather than assuming them:
+`AsyncEventFailureHooksIntegrationTests` for detecting a failed publication, inspecting it without
+resubmitting it, retrying a single one by identifier and discarding one without invoking the listener;
+and `AsyncEventFailureNotificationIntegrationTests` for being notified of a failure proactively,
+without polling. The design is written up in
 [docs/async-event-error-handling-design.md](docs/async-event-error-handling-design.md).
 
 Note that this is a **different path** from the one the `messaging` module takes. A Kafka message whose
@@ -424,6 +426,8 @@ be pointed at it.
   `JeapAuthenticationTestTokenBuilder`
 * `AsyncEventFailureHooksIntegrationTests` — the Spring Modulith hooks for detecting, retrying and
   discarding a failed event publication, which the planned error handling bridge will build on
+* `AsyncEventFailureNotificationIntegrationTests` — the proactive hook that reports a failed
+  publication without polling, and what it cannot see
 
 ### Integration tests
 
