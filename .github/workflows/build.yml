@@ -1,0 +1,17 @@
+name: Build
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: jme-admin-ch/.github/.github/workflows/build.yml@main
+    with:
+      maven-args: '--batch-mode install'
+      triggered-manually: ${{ github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write

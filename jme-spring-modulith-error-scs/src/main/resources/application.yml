@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: jme-spring-modulith-error-scs
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: org.postgresql.Driver
+    url: "jdbc:postgresql://localhost:5541/jeap-error-handling-service-db-local"
+    hikari:
+      maximum-pool-size: 10
+      pool-name: "hikari-cp-${spring.application.name}"
+      schema: ${spring.jpa.properties.hibernate.default_schema}
+  jpa:
+    properties:
+      hibernate.default_schema: data
+  flyway:
+    # Flyway creates the default schema automatically if it doesn't exist
+    default-schema: ${spring.jpa.properties.hibernate.default_schema}
+  security:
+    oauth2:
+      client:
+        registration:
+          jme-spring-modulith-error-service:
+            client-id: "jme-spring-modulith-error-service"
+            client-secret: "secret"
+            authorization-grant-type: "client_credentials"
+            provider: "jme-oauth2-provider"
+        provider:
+          jme-oauth2-provider:
+            issuer-uri: "${jeap.security.oauth2.resourceserver.authorization-server.issuer}"
+
+# The servlet path must be error-handling as this is what the error handling UI expects. This example
+# does not deploy that UI, but keeping the path makes the API compatible with it.
+server:
+  servlet:
+    context-path: /error-handling
+
+jeap:
+  errorhandling:
+    # The topic failed message processing is reported on. jme-spring-modulith-scs publishes to the
+    # same topic via jeap.messaging.kafka.errorTopicName.
+    topic: "jme-messageprocessing-failed"
+    deadLetterTopicName: "jme-messageprocessing-deadletter"
+    # This example ships no UI, but the error handling service requires the configuration of its
+    # frontend, so the minimum is declared here. Point a locally running error handling UI at this
+    # service if you want to work with the errors in a browser rather than through the REST API.
+    frontend:
+      clientId: "error-handling-ui"
+      systemName: "jme"
+      silentRenew: true
+      autoLogin: true
+      renewUserInfoAfterTokenRenew: true
+      ticketingSystemUrl: https://jira.bit.admin.ch/browse/{ticketNumber}
+    # There is no integration of the manual task service in this example
+    task-management:
+      service:
+        enabled: false
+  messaging:
+    kafka:
+      systemName: JME
+      serviceName: ${spring.application.name}
+  security:
+    oauth2:
+      resourceserver:
+        system-name: "jme"
+  postgresql:
+    aws:
+      enabled: false
+  web:
+    tls:
+      enabled: false
+  swagger:
+    status: open
+management:
+  # Trace every request so every demo call in this example produces a trace.
+  # Spring Boot's default is 0.1 (10%). Production services should usually leave the
+  # default in place (or sample even lower) to keep trace storage and cost bounded.
+  tracing:
+    sampling:
+      probability: 1.0

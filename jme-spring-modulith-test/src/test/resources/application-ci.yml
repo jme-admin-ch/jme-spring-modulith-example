@@ -1,0 +1,7 @@
+spring:
+  docker:
+    compose:
+      host: 172.18.0.1
+      file:
+        - ../docker/docker-compose.yml
+        - ../docker/docker-compose-ci.yml

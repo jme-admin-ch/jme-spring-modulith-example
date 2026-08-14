@@ -1,0 +1,32 @@
+# Overlay for the module tests of this service, on top of the regular application.yml. The datasource
+# is provided by Testcontainers (see TestcontainersConfiguration), everything that would reach out over
+# the network is turned off.
+spring:
+  kafka:
+    listener:
+      # No broker in these tests: the Kafka adapter is covered by jme-spring-modulith-test, which runs
+      # against the real infrastructure from docker/docker-compose.yml.
+      auto-startup: false
+
+jeap:
+  messaging:
+    kafka:
+      bootstrapServers: "localhost:9999"
+      securityProtocol: PLAINTEXT
+      schemaRegistryUrl: "mock://none"
+      useSchemaRegistry: false
+      autoRegisterSchema: true
+  security:
+    oauth2:
+      resourceserver:
+        authorization-server:
+          # The tests inject a JeapAuthenticationToken directly instead of presenting a JWT, so this
+          # issuer is never contacted. It has to be set, though: the jEAP security starter only
+          # auto-configures itself when an authorization server is configured.
+          issuer: "http://localhost/auth-mock"
+          jwk-set-uri: "${jeap.security.oauth2.resourceserver.authorization-server.issuer}/.well-known/jwks.json"
+
+management:
+  health:
+    jeap-kafka:
+      enabled: false

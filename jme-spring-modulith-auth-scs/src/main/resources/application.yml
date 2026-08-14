@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: jme-spring-modulith-auth-scs
+server:
+  servlet:
+    context-path: /jme-spring-modulith-auth-scs
+jeap:
+  monitor:
+    prometheus:
+      user: "prometheus"
+      password: "{noop}secret"
+  web:
+    tls:
+      enabled: false

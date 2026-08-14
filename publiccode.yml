@@ -1,0 +1,53 @@
+publiccodeYmlVersion: 0.5.0
+name: jme-spring-modulith-example
+applicationSuite: JME
+softwareVersion: 1.0.0
+releaseDate: 2026-08-14
+url: "https://github.com/jme-admin-ch/jme-spring-modulith-example.git"
+landingURL: "https://github.com/jme-admin-ch/jme"
+platforms:
+  - web
+categories:
+  - application-development
+developmentStatus: stable
+softwareType: standalone/backend
+organisation:
+  uri: https://ld.admin.ch/office/V.1.7
+  name: Federal Office of Information Technology, Systems and Telecommunication
+description:
+  en:
+    localisedName: jme-spring-modulith-example
+    shortDescription: Example project demonstrating how to build a Spring Modulith application on the jEAP platform.
+    longDescription: >
+      Spring Modulith structures a Spring Boot application into application modules that are verified
+      at build time and integrated through asynchronous application events rather than direct calls.
+      This repository shows how such an application is built on the jEAP platform: the modules are
+      integrated through internal asynchronous events backed by the JDBC event publication registry,
+      an external event is consumed from Kafka with jEAP messaging, failed message processing is
+      handed over to the jEAP Error Handling Service, and the REST API is protected by the jEAP
+      security starter using semantic roles — one semantic resource per application module.
+      It contains the following modules:
+      * jme-spring-modulith-scs: The Spring Modulith example service with its four application
+        modules order, inventory, notification and messaging
+      * jme-spring-modulith-auth-scs: An instance of the jEAP OAuth mock server used as
+        authorization server
+      * jme-spring-modulith-error-scs: An instance of the jEAP Error Handling Service
+      * jme-spring-modulith-test: Automated integration tests covering the local Docker Compose setup
+    features:
+      - Demonstrates internal asynchronous events between application modules with @ApplicationModuleListener
+      - Demonstrates the JDBC event publication registry and its at-least-once delivery guarantee
+      - Demonstrates consuming an external Kafka event and reporting failures to the jEAP Error Handling Service
+      - Demonstrates authorization with jEAP semantic roles, one semantic resource per application module
+      - Verifies the module boundaries at build time and generates module documentation
+      - Local Docker Compose setup with Kafka, a schema registry and PostgreSQL
+legal:
+  license: Apache-2.0
+maintenance:
+  type: internal
+  contacts:
+    - name: Federal Office of Information Technology, Systems and Telecommunication FOITT
+      email: jeap-community@bit.admin.ch
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - en

@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: jme-spring-modulith-it
+  main:
+    banner-mode: off
+  docker:
+    compose:
+      enabled: true
+      file: ../docker/docker-compose.yml
+      lifecycle-management: start-and-stop
+      skip:
+        in-tests: false
+      arguments:
+        - "--project-name=${COMPOSE_PROJECT_NAME:jme-spring-modulith-it}"
+      readiness:
+        timeout: 60s

@@ -1,0 +1,46 @@
+server:
+  port: 8090
+
+spring:
+  datasource:
+    username: "modulith"
+    password: "secret"
+
+jeap:
+  monitor:
+    prometheus:
+      password: "{noop}secret"
+    actuator:
+      password: "{noop}secret"
+      # Required for the /actuator/modulith endpoint listed under
+      # jeap.monitor.actuator.additional-permitted-endpoints to be reachable. Development only:
+      # jEAP requires this to stay false on acceptance and production.
+      enable-admin-endpoints: true
+
+  security:
+    oauth2:
+      resourceserver:
+        # Log why a request was rejected — useful while trying out the semantic roles of this example
+        log:
+          authentication-failure:
+            enabled: true
+          access-denied:
+            enabled: true
+            debug: true
+        authorization-server:
+          issuer: "http://localhost:8091/jme-spring-modulith-auth-scs"
+          jwk-set-uri: "${jeap.security.oauth2.resourceserver.authorization-server.issuer}/.well-known/jwks.json"
+
+  # The Kafka cluster to be used. See the documentation of the jEAP messaging library for details.
+  messaging:
+    kafka:
+      bootstrapServers: "http://localhost:9092"
+      schemaRegistryUrl: "http://localhost:7781"
+      username: user
+      password: user-secret
+      securityProtocol: SASL_PLAINTEXT
+      set-compatibility-mode-none: true
+
+logging:
+  level:
+    ch.admin.bit.jme.modulith: DEBUG

@@ -1,0 +1,25 @@
+# CI overlay for docker-compose. This file is used to override the default docker-compose.yml file in CI
+
+services:
+
+  jme-spring-modulith-db-local:
+    ports: !reset [ ]
+    labels:
+      org.springframework.boot.ignore: true
+
+  jeap-error-handling-service-db-local:
+    ports: !reset [ ]
+    labels:
+      org.springframework.boot.ignore: true
+
+  schema-registry:
+    ports: !reset [ ]
+
+  broker:
+    ports: !reset [ ]
+
+networks:
+  default:
+    external: true
+    # Network is created by the CI job and includes the test runner & the containers started by this compose file
+    name: ${COMPOSE_PROJECT_NAME}_default

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <name>${project.groupId}:${project.artifactId}</name>
+    <modelVersion>4.0.0</modelVersion>
+    <url>https://github.com/jme-admin-ch/jme-spring-modulith-example/tree/main</url>
+    <scm>
+        <url>https://github.com/jme-admin-ch/jme-spring-modulith-example.git</url>
+        <connection>scm:git:git://github.com/jme-admin-ch/jme-spring-modulith-example.git</connection>
+        <developerConnection>scm:git:ssh://github.com:jme-admin-ch/jme-spring-modulith-example.git</developerConnection>
+    </scm>
+    <developers>
+        <developer>
+            <name>BIT</name>
+            <email>jeap-community@bit.admin.ch</email>
+            <organization>Federal Office of Information Technology, Systems and Telecommunication FOITT</organization>
+            <organizationUrl>https://www.bit.admin.ch/</organizationUrl>
+        </developer>
+    </developers>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
+
+    <parent>
+        <groupId>ch.admin.bit.jeap</groupId>
+        <artifactId>jeap-spring-boot-parent</artifactId>
+        <version>39.0.0</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>ch.admin.bit.jeap</groupId> <!-- GroupId is necessary for RHOS sca-check-->
+    <artifactId>jme-spring-modulith-example</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <description>
+        Sample project demonstrating how to build a Spring Modulith application on the jEAP platform:
+        application modules integrated through internal asynchronous events, an external Kafka event
+        consumed via jEAP messaging, and failed message processing handled by the jEAP Error Handling
+        Service.
+    </description>
+
+    <modules>
+        <module>jme-spring-modulith-scs</module>
+        <module>jme-spring-modulith-auth-scs</module>
+        <module>jme-spring-modulith-error-scs</module>
+        <module>jme-spring-modulith-test</module>
+    </modules>
+
+    <properties>
+        <jeap-oauth-mock-server.version>8.6.0</jeap-oauth-mock-server.version>
+        <jeap-error-handling-service.version>20.2.0</jeap-error-handling-service.version>
+        <jme-spring-boot-integration-test.version>5.12.0</jme-spring-boot-integration-test.version>
+        <jme-order-created-event.version>1.0.0</jme-order-created-event.version>
+        <!-- Spring Modulith is not managed by the jEAP parent, its BOM is imported below.
+             2.1.0 is built against Spring Boot 4.1.0, the version the jEAP parent brings in. -->
+        <spring-modulith.version>2.1.0</spring-modulith.version>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-bom</artifactId>
+                <version>${spring-modulith.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.admin.bit.jeap.jme.messagetype.jme</groupId>
+                <artifactId>jme-order-created-event</artifactId>
+                <version>${jme-order-created-event.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jme-spring-modulith-scs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Add license to jar manifest -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <configuration>
+                        <archive>
+                            <manifestEntries>
+                                <Bundle-License>https://www.apache.org/licenses/LICENSE-2.0</Bundle-License>
+                            </manifestEntries>
+                        </archive>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <!-- Check third-party license compliance -->
+            <plugin>
+                <groupId>org.honton.chas</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+            </plugin>
+            <!-- Generate third-party license list and check for missing license information -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+            </plugin>
+            <!-- Attach an empty javadoc jar to every module (javadoc generation itself is skipped via
+                 maven.javadoc.skip) so Maven Central's "javadoc must be present" check is satisfied
+                 uniformly, including for the auth-scs and error-scs modules which have no Java sources
+                 of their own. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>empty-javadoc-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>javadoc</classifier>
+                            <classesDirectory>${project.basedir}</classesDirectory>
+                            <excludes>
+                                <exclude>**/**</exclude>
+                            </excludes>
+                            <forceCreation>true</forceCreation>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

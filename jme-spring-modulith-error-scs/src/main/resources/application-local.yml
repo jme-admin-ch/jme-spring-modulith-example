@@ -1,0 +1,51 @@
+server:
+  port: 8092
+
+spring:
+  datasource:
+    username: "errorhandling"
+    password: "secret"
+
+jeap:
+  monitor:
+    prometheus:
+      password: "{noop}secret"
+
+  errorhandling:
+    frontend:
+      applicationUrl: http://localhost:8092/error-handling
+      logoutRedirectUri: http://localhost:4199/
+      pamsEnabled: false
+
+    resend:
+      default-resending-strategy:
+        # A temporary error is resent up to 3 times, 10 seconds apart, before it is escalated to a
+        # permanent error. Kept short so the behaviour is observable while trying out the example.
+        max-retries: 3
+        exponential-backoff-enabled: false
+        delay: 10s
+
+    kafka:
+      errorhandling:
+        retry-interval: 5s
+
+  swagger:
+    status: open
+
+  # The authorization server, see the jEAP OAuth documentation for details
+  security:
+    oauth2:
+      resourceserver:
+        authorization-server:
+          issuer: "http://localhost:8091/jme-spring-modulith-auth-scs"
+          jwk-set-uri: "http://localhost:8091/jme-spring-modulith-auth-scs/.well-known/jwks.json"
+
+  # The Kafka cluster to be used. See the documentation of the jEAP messaging library for details.
+  messaging:
+    kafka:
+      bootstrapServers: "http://localhost:9092"
+      schemaRegistryUrl: "http://localhost:7781"
+      username: user
+      password: user-secret
+      securityProtocol: SASL_PLAINTEXT
+      set-compatibility-mode-none: true

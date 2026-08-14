@@ -1,0 +1,12 @@
+# On CI the services run inside the docker network created by the build, so they address the
+# infrastructure by container name instead of localhost. Activated together with the local profile.
+jeap:
+  messaging:
+    kafka:
+      bootstrapServers: "broker:29092"
+      schemaRegistryUrl: "http://schema-registry:8081"
+      securityProtocol: PLAINTEXT
+
+spring:
+  datasource:
+    url: "jdbc:postgresql://jeap-error-handling-service-db-local:5432/jeap-error-handling-service-db-local"

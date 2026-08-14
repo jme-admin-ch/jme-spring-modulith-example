@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: jme-spring-modulith-scs
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: org.postgresql.Driver
+    url: "jdbc:postgresql://localhost:5540/jme-spring-modulith-db-local"
+    hikari:
+      maximum-pool-size: 10
+      pool-name: "hikari-cp-${spring.application.name}"
+  jpa:
+    # The schema is owned by Flyway, Hibernate must not touch it
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  modulith:
+    events:
+      jdbc:
+        # The event_publication table is created by V1__event_publication.sql
+        schema-initialization:
+          enabled: false
+      # Republish publications that were still incomplete when the application last shut down
+      republish-outstanding-publications-on-restart: true
+
+server:
+  servlet:
+    context-path: /jme-spring-modulith-scs
+
+jeap:
+  messaging:
+    kafka:
+      # Failed message processing is reported on this topic, which jme-spring-modulith-error-scs
+      # consumes. This single property is the whole wiring between a consumer and error handling.
+      errorTopicName: jme-messageprocessing-failed
+      systemName: JME
+      serviceName: ${spring.application.name}
+  security:
+    oauth2:
+      resourceserver:
+        # Setting the system name activates the semantic role model
+        # (system_%tenant_@resource_#operation). Without it, roles would be opaque strings.
+        system-name: "jme"
+  monitor:
+    prometheus:
+      user: "prometheus"
+      password: "{noop}secret"
+    actuator:
+      user: "actuator"
+      password: "{noop}secret"
+      # The actuator security chain of jeap-spring-boot-monitoring-starter denies every endpoint it
+      # does not know, so the Spring Modulith endpoint has to be added to the permitted ones. This
+      # only takes effect together with enable-admin-endpoints, which is set in the local profile
+      # because it must stay off on acceptance and production.
+      additional-permitted-endpoints:
+        - org.springframework.modulith.actuator.ApplicationModulesEndpoint
+  postgresql:
+    aws:
+      enabled: false
+  web:
+    tls:
+      enabled: false
+
+management:
+  endpoint:
+    # jeap-spring-boot-monitoring-starter disables actuator endpoints by default and enables them
+    # selectively. /actuator/modulith is contributed by spring-modulith-starter-insight and reports
+    # the application modules and their dependencies as the running application sees them.
+    modulith:
+      access: read-only
+  # Trace every request so every demo call in this example produces a trace, and the per-module spans
+  # contributed by spring-modulith-starter-insight are visible. Spring Boot's default is 0.1 (10%);
+  # production services should usually leave the default in place to keep trace storage bounded.
+  tracing:
+    sampling:
+      probability: 1.0
