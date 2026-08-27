@@ -62,9 +62,13 @@ failed JDBC v2 publications.
 | Property                                               | Value                              | Meaning                                                                                   |
 |--------------------------------------------------------|------------------------------------|-------------------------------------------------------------------------------------------|
 | `jeap.modulith.error-handling.retry-interval`          | `5s`                               | How often retryable publications are selected                                             |
+| `jeap.modulith.error-handling.retry-lock-at-least`     | `5s` (starter default)             | Minimum ShedLock duration for a retry sweep                                                |
+| `jeap.modulith.error-handling.retry-lock-at-most`      | `5m` (starter default)             | Maximum ShedLock duration for a retry sweep                                                |
 | `jeap.modulith.error-handling.retry-min-age`           | `2s`                               | Minimum age of a failed publication before retry                                           |
 | `jeap.modulith.error-handling.max-completion-attempts` | `3`                                | Total listener invocations, including the initial one                                      |
 | `jeap.modulith.error-handling.reconciliation-interval` | `5s`                               | How often exhausted publications are reconciled                                            |
+| `jeap.modulith.error-handling.reconciliation-lock-at-least` | `5s` (starter default)        | Minimum ShedLock duration for a reconciliation sweep                                       |
+| `jeap.modulith.error-handling.reconciliation-lock-at-most` | `30m` (starter default)         | Maximum ShedLock duration for a reconciliation sweep                                       |
 | `jeap.modulith.error-handling.reconciliation-min-age`  | `2s`                               | Minimum age before escalation                                                              |
 | `jeap.modulith.error-handling.failure-event-topic`     | `jme-messageprocessing-failed`     | Topic carrying `ModulithPublicationProcessingFailedEvent`                                  |
 | `jeap.modulith.error-handling.retry-command-topic`     | `jme-retry-modulith-publication`   | Topic carrying `RetryModulithPublicationCommand`                                           |
@@ -75,7 +79,7 @@ real service would use longer intervals. `completion_attempts` keeps the retry b
 Once the budget is exhausted, the starter publishes a failure event through the transactional outbox
 and records `(publication_id, completion_attempts)` in `modulith_publication_failure`. The Error
 Handling Service stores the event with origin `MODULITH_PUBLICATION` and publishes a UUID-exact retry
-or discard command when an operator acts on it.
+or discard command on the consumed Kafka cluster when an operator acts on it.
 
 ## Error handling service
 

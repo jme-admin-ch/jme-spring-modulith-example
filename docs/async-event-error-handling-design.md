@@ -92,7 +92,8 @@ again, Spring Modulith increments the attempt counter. Attempt four is a new gen
 new EHS error, matching the behavior of a retried Kafka message that fails again.
 
 The transactional outbox makes the escalation marker and outbound event atomic. A database rollback
-cannot leave a marker without a corresponding message. Scheduled work is coordinated with ShedLock.
+cannot leave a marker without a corresponding message. The retry and reconciliation sweeps have separate ShedLock
+locks, using the application database and database time.
 
 ## Message contracts
 
@@ -133,7 +134,8 @@ the database primary key.
 
 Both commands reference the publication UUID. The discard command additionally carries the operator's
 reason when available. The application declares producer and consumer contracts on its configured
-topics; in this example they are:
+topics. The EHS persists the cluster on which it consumed the failure event and selects that cluster's outbox for the
+command, without a default-cluster fallback. In this example the topics are:
 
 | Direction | Topic |
 |---|---|
@@ -209,6 +211,7 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Immediate escalation cannot write the outbox | Its transaction rolls back; reconciliation retries |
 | Immediate path and reconciliation race | The generation primary key lets only one publish transaction win |
 | Two application instances reconcile concurrently | ShedLock serializes scheduled sweeps; the database uniqueness constraint remains the final guard |
+| EHS Kafka cluster configuration changes while an error is open | Retry or discard fails and leaves the error open if the stored cluster no longer has an outbox |
 | Retry command is delivered twice | Only the first command can claim the failed publication |
 | Discard command is delivered twice | The second conditional update is a no-op |
 | Retry fails again | The incremented completion attempt creates one new EHS generation |
