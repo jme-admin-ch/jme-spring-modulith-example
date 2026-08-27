@@ -21,31 +21,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Demonstrates the Spring Modulith hooks the planned async event error handling bridge is going to
- * need, and proves that they behave as
- * {@code docs/async-event-error-handling-design.md} claims. Whoever implements that bridge should be
- * able to read this test instead of rediscovering the API.
+ * Demonstrates the Spring Modulith hooks evaluated for the async event error handling starter and
+ * proves that they behave as {@code docs/async-event-error-handling-design.md} describes.
  * <p>
- * Four things are shown, in the order the bridge will use them:
+ * Four relevant API behaviors are shown:
  * <ol>
  *     <li><b>Detect</b> — a listener that throws leaves a {@code FAILED} publication that can be
  *         enumerated, together with the event, the target listener and the attempt count.</li>
  *     <li><b>Escalate</b> — {@link EventPublicationRegistry#processFailedPublications} hands each
- *         failed publication to a callback <em>without</em> resubmitting it, which is what the bridge
- *         needs in order to publish an error event instead of retrying.</li>
+ *         failed publication to a callback <em>without</em> invoking the listener. The starter uses a
+ *         policy-aware SQL sweep instead because this API transitions a limited database batch before
+ *         applying its filter.</li>
  *     <li><b>Retry</b> — a single publication can be resubmitted by identifier, which is what
  *         handling a {@code RetryModulithPublicationCommand} amounts to.</li>
  *     <li><b>Discard</b> — a single publication can be marked completed without invoking the
  *         listener, which is what handling a {@code DiscardModulithPublicationCommand} amounts to.</li>
  * </ol>
- * The scheduled {@link FailedEventPublicationResubmitter} is switched off here (a one hour interval,
- * and a retry budget that is already used up after the first attempt) so that the test drives the
- * retries itself and nothing happens behind its back.
+ * The starter's scheduled retry is switched off in the test profile so that the test drives retries
+ * itself and nothing happens behind its back.
  */
-@SpringBootTest(properties = {
-        "jme.modulith.event-resubmission.interval=1h",
-        "jme.modulith.event-resubmission.max-completion-attempts=1"
-})
+@SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class AsyncEventFailureHooksIntegrationTests {

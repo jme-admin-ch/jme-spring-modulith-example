@@ -28,8 +28,7 @@ spring:
           jme-oauth2-provider:
             issuer-uri: "${jeap.security.oauth2.resourceserver.authorization-server.issuer}"
 
-# The servlet path must be error-handling as this is what the error handling UI expects. This example
-# does not deploy that UI, but keeping the path makes the API compatible with it.
+# The servlet path must be error-handling as this is what the bundled error handling UI expects.
 server:
   servlet:
     context-path: /error-handling
@@ -40,9 +39,7 @@ jeap:
     # same topic via jeap.messaging.kafka.errorTopicName.
     topic: "jme-messageprocessing-failed"
     deadLetterTopicName: "jme-messageprocessing-deadletter"
-    # This example ships no UI, but the error handling service requires the configuration of its
-    # frontend, so the minimum is declared here. Point a locally running error handling UI at this
-    # service if you want to work with the errors in a browser rather than through the REST API.
+    # Configuration served to the bundled error handling UI.
     frontend:
       clientId: "error-handling-ui"
       systemName: "jme"

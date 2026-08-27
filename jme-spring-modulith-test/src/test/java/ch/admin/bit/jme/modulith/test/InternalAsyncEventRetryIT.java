@@ -16,9 +16,9 @@ import static org.awaitility.Awaitility.await;
  * <p>
  * An order of type {@code FAIL_ASYNC} is consumed from Kafka without trouble and registered in the
  * {@code order} module, which publishes {@code OrderCompleted}. The {@code shipping} listener of that
- * event then fails, so Spring Modulith marks its event publication {@code FAILED} and the resubmission
- * configured in {@code FailedEventPublicationResubmitter} retries it until the retry budget
- * ({@code jme.modulith.event-resubmission.max-completion-attempts}) is used up.
+ * event then fails, so Spring Modulith marks its event publication {@code FAILED} and the jEAP Spring
+ * Modulith error handling starter retries it until the retry budget
+ * ({@code jeap.modulith.error-handling.max-completion-attempts}) is used up.
  * <p>
  * The listeners of the other two modules complete normally — each listener has its own publication and
  * its own transaction, so one of them failing does not hold up the others.
@@ -27,7 +27,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
     /**
      * Spring Modulith counts the initial invocation as the first completion attempt, so
-     * jme.modulith.event-resubmission.max-completion-attempts=3 means the listener runs three times in
+     * jeap.modulith.error-handling.max-completion-attempts=3 means the listener runs three times in
      * total: the initial attempt plus two retries.
      */
     private static final int EXPECTED_TOTAL_ATTEMPTS = 3;

@@ -4,7 +4,8 @@ Example project demonstrating how to build a [Spring Modulith](https://spring.io
 application on the jEAP platform: application modules integrated through internal asynchronous events,
 an external event consumed from Kafka with
 [jeap-messaging](https://github.com/jeap-admin-ch/jeap-messaging), failed message processing handed
-over to the [jEAP Error Handling Service](https://github.com/jeap-admin-ch/jeap-error-handling), and a
+over to the [jEAP Error Handling Service](https://github.com/jeap-admin-ch/jeap-error-handling), failed
+internal event publications retried and escalated through the jEAP Spring Modulith error handling starter, and a
 REST API protected by the
 [jEAP security starter](https://github.com/jeap-admin-ch/jeap-spring-boot-starters) with semantic roles.
 
@@ -32,7 +33,7 @@ This README is the entry point. Deeper documentation lives in `docs/`:
 |---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | [Architecture](docs/architecture.md)                                            | The application modules, how a message travels through the system, and the two failure paths                             |
 | [Configuration](docs/configuration.md)                                          | Every property, port, topic, role and client the example uses, and why                                                   |
-| [Design: async event error handling](docs/async-event-error-handling-design.md) | Design for the **planned** bridge that escalates failed internal asynchronous events to the jEAP Error Handling Service |
+| [Async event error handling](docs/async-event-error-handling-design.md)         | Design and implemented flow for retrying and escalating failed internal asynchronous events                           |
 
 ## Changes
 
@@ -140,56 +141,42 @@ shipment over to the carrier throw. The `inventory` and `notification` listeners
 event complete normally — each listener has its own row in `event_publication` and its own
 transaction.
 
-Spring Modulith persists failed publications but does not retry them on a schedule by itself: it
-offers `FailedEventPublications.resubmit(ResubmissionOptions)` and leaves the retry policy to the
-application. [`FailedEventPublicationResubmitter`](jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/FailedEventPublicationResubmitter.java)
-is that policy:
+Spring Modulith persists failed publications but leaves retry policy and operational escalation to the
+application. The `jeap-spring-modulith-error-handling-starter` supplies both using the JDBC v2 registry:
 
-```java
-@Scheduled(fixedDelayString = "${jme.modulith.event-resubmission.interval}")
-void resubmitFailedPublications() {
-    failedEventPublications.resubmit(ResubmissionOptions.defaults()
-            .withMinAge(minAge)
-            .withFilter(this::hasRetriesLeft));
-}
-```
+| Property                                                   | Value | Meaning                                                                                           |
+|------------------------------------------------------------|-------|---------------------------------------------------------------------------------------------------|
+| `jeap.modulith.error-handling.retry-interval`              | `5s`  | How often retryable publications are selected                                                     |
+| `jeap.modulith.error-handling.retry-min-age`               | `2s`  | How old a failed publication must be before it is retried                                         |
+| `jeap.modulith.error-handling.max-completion-attempts`     | `3`   | Total listener invocations; Spring Modulith counts the initial invocation as the first attempt     |
+| `jeap.modulith.error-handling.reconciliation-interval`     | `5s`  | How often exhausted publications are reconciled with the Error Handling Service                    |
+| `jeap.modulith.error-handling.reconciliation-min-age`      | `2s`  | Minimum age before an exhausted publication is escalated                                          |
 
-| Property                                              | Value | Meaning                                                                                        |
-|-------------------------------------------------------|-------|------------------------------------------------------------------------------------------------|
-| `jme.modulith.event-resubmission.interval`            | `5s`  | How often failed publications are looked at                                                     |
-| `jme.modulith.event-resubmission.min-age`             | `2s`  | How old a failed publication must be before it is retried                                       |
-| `jme.modulith.event-resubmission.max-completion-attempts` | `3` | Total invocations of the listener. Spring Modulith counts the initial one, so this is 1 + 2 retries |
+Each resubmission increments `completion_attempts`. At the configured limit the publication remains
+`FAILED`, so an operator can still target it, and the starter publishes a
+`ModulithPublicationProcessingFailedEvent` through the transactional outbox. The values above are
+deliberately impatient so the behaviour is observable while trying out the example.
 
-Each resubmission increments the publication's `completion_attempts`. Once the budget is used up the
-publication is left alone and stays `FAILED` in the registry. The values above are deliberately
-impatient so the behaviour is observable while trying out the example.
-
-### Planned: escalating exhausted retries to the error handling service
-
-Retries running out is where an internal asynchronous event needs the same treatment a failed Kafka
-message already gets. An error handling bridge for that is planned but **not implemented yet**:
+### Escalating exhausted retries to the error handling service
 
 ```
 Kafka event
   → internal async event
     → async event processor fails
-      → Spring Modulith resubmission          ← implemented (FailedEventPublicationResubmitter)
-        → retries exhausted                   ← implemented (onRetriesExhausted)
-          → bridge publishes ModulithPublicationProcessingFailedEvent      ← planned
-            → jEAP Error Handling Service                                  ← planned
+      → starter resubmits the failed Spring Modulith publication
+        → retries exhausted
+          → starter publishes ModulithPublicationProcessingFailedEvent
+            → jEAP Error Handling Service
               → RetryModulithPublicationCommand / DiscardModulithPublicationCommand
-                → this application resubmits or discards the publication   ← planned
+                → starter resubmits or completes exactly that publication
 ```
 
-This example is the fixture for that feature: `FailedEventPublicationResubmitter.onRetriesExhausted(…)`
-is the seam the bridge will hook into, and the `shipping` module provides a failing listener that
-reliably drives a publication into that state. Today the method only reports the failure.
-
-Two tests prove the hooks that design depends on, rather than assuming them:
-`AsyncEventFailureHooksIntegrationTests` for detecting a failed publication, inspecting it without
-resubmitting it, retrying a single one by identifier and discarding one without invoking the listener;
-and `AsyncEventFailureNotificationIntegrationTests` for being notified of a failure proactively,
-without polling. The design is written up in
+The failure event carries the publication UUID, listener, event type and serialized payload. The EHS
+stores it with origin `MODULITH_PUBLICATION`; retry and delete actions publish commands to the topics
+declared by that event. Command handling is UUID-exact and idempotent. Escalation is keyed by
+`(publication_id, completion_attempts)`, so repeated reconciliation of one failed generation does not
+create duplicate operational errors, while a manually retried publication that fails again can be
+escalated as a new generation. The design and its constraints are described in
 [docs/async-event-error-handling-design.md](docs/async-event-error-handling-design.md).
 
 Note that this is a **different path** from the one the `messaging` module takes. A Kafka message whose
@@ -306,6 +293,7 @@ docker compose -f docker/docker-compose.yml exec jme-spring-modulith-db-local \
 -----------------------------------------------------------------------------------+-----------
  ...inventory.InventoryManagement.on(...order.OrderCompleted)                       | COMPLETED
  ...notification.NotificationManagement.on(...order.OrderCompleted)                 | COMPLETED
+ ...shipping.ShippingManagement.on(...order.OrderCompleted)                         | COMPLETED
 ```
 
 ### A failing internal asynchronous event
@@ -318,7 +306,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-3&orderType=FAIL_ASYNC"
 ```
 
-Watch the listener being retried, and stopping after the third attempt:
+Watch the listener being retried, and stopping its automatic retries after the third attempt:
 
 ```shell
 curl -H "Authorization: Bearer $TOKEN" \
@@ -332,8 +320,14 @@ two `COMPLETED` rows and one `FAILED` row that has used up its attempts:
 ```shell
 docker compose -f docker/docker-compose.yml exec jme-spring-modulith-db-local \
   psql -U modulith -d jme-spring-modulith-db-local \
-  -c "select listener_id, status, completion_attempts from event_publication;"
+   -c "select listener_id, status, completion_attempts from event_publication;"
 ```
+
+After the retry budget is exhausted, the Error Handling Service exposes a permanent error with origin
+`MODULITH_PUBLICATION`. Retrying it invokes the listener once more through
+`RetryModulithPublicationCommand`; deleting it sends `DiscardModulithPublicationCommand` and completes
+the publication without another listener invocation. Use the Error Handling Service API shown below,
+or open its bundled UI at `http://localhost:8092/error-handling`.
 
 ### The module model at runtime
 
@@ -365,6 +359,8 @@ curl -i -H "Authorization: Bearer $NO_ROLES" http://localhost:8090/jme-spring-mo
 ```
 
 ## Error handling
+
+### Kafka consumption failures
 
 The Kafka consumer treats two order types as failures, so that both temporalities of the jEAP error
 handling can be demonstrated without breaking anything:
@@ -407,9 +403,29 @@ curl -s -X POST "http://localhost:8092/error-handling/api/error/?pageIndex=0&pag
 Replacing `FAIL_PERMANENT` with `FAIL_TEMPORARY` shows the other path: the same error appears, but the
 error handling service keeps resending the message every 10 seconds until the retries are exhausted.
 
-This example ships no UI. The error handling service is configured with the context path
-`/error-handling` that the jEAP error handling UI expects, so a locally running instance of that UI can
-be pointed at it.
+### Internal event publication failures
+
+For `FAIL_ASYNC`, query the EHS list for an entry whose `origin` is `MODULITH_PUBLICATION`. Its details
+include `publicationId`, `publicationListener`, `publicationEventType` and the JSON payload. The same
+existing EHS actions drive the Modulith-specific command path:
+
+```shell
+# Retry exactly the failed publication
+curl -X POST -H "Authorization: Bearer $ERROR_TOKEN" \
+  "http://localhost:8092/error-handling/api/error/$ERROR_ID/event/retry"
+
+# Discard exactly the failed publication
+curl -X DELETE -H "Authorization: Bearer $ERROR_TOKEN" \
+  "http://localhost:8092/error-handling/api/error/$ERROR_ID?reason=discarded-for-demo"
+```
+
+Retry changes the original EHS entry to `PERMANENT_RETRIED`. If the listener fails again, the higher
+completion-attempt generation is eligible for a new EHS entry. Discard changes the EHS entry to
+`DELETED` and the referenced `event_publication` row to `COMPLETED`.
+
+The Error Handling Service dependency includes the UI. It is available under the configured
+`/error-handling` context path and labels the actions for this origin as retry publication and discard
+publication.
 
 ## Tests
 
@@ -424,12 +440,9 @@ be pointed at it.
   passing unnoticed.
 * `OrderApiSecurityTests` — drives the REST API through MockMvc with tokens built by
   `JeapAuthenticationTestTokenBuilder`
-* `AsyncEventFailureHooksIntegrationTests` — the Spring Modulith hooks for detecting, retrying and
-  discarding a failed event publication, which the planned error handling bridge will build on
-* `AsyncEventFailureNotificationIntegrationTests` — the proactive hook that reports a failed
-  publication without polling, and what it cannot see
-* `AsyncEventPayloadIntegrationTests` — obtaining the failed event's payload best effort, so the
-  error handling service can display it
+* `AsyncEventFailureHooksIntegrationTests` — Spring Modulith's targeted retry and discard behavior
+* `AsyncEventFailureNotificationIntegrationTests` — failure notification behavior used by the starter's low-latency path
+* `AsyncEventPayloadIntegrationTests` — obtaining the failed event payload included in the EHS entry
 
 ### Integration tests
 
@@ -439,8 +452,8 @@ the three services as Maven subprocesses, then exercises the running system:
 * `SpringModulithExampleIT` — the happy path from the Kafka event through to all three listeners, and
   the semantic role authorization
 * `ErrorHandlingIT` — the two Kafka consumption failures escalated to the error handling service
-* `InternalAsyncEventRetryIT` — the failing internal asynchronous event, its retries and their
-  exhaustion
+* `InternalAsyncEventRetryIT` — the failing internal event, the starter's persistent retries and its
+  escalation after exhaustion
 
 The tests are named `*IT` and therefore run in the `verify` phase:
 

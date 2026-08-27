@@ -51,24 +51,31 @@ constant on the generated `TypeRef`, so it is never spelled out in the code.
 > The property is `republish-outstanding-**events**-on-restart`. The plausible-looking
 > `republish-outstanding-publications-on-restart` is not a property and is silently ignored.
 
-The staleness monitor and the resubmitter are scheduled tasks, so `Application` is annotated
-`@EnableScheduling`.
+The staleness monitor and the starter's retry and reconciliation loops are scheduled tasks, so
+`Application` is annotated `@EnableScheduling`.
 
-## Retry of failed internal asynchronous events
+## Failed internal asynchronous events
 
-Applied by
-[`FailedEventPublicationResubmitter`](../jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/FailedEventPublicationResubmitter.java).
-Spring Modulith has no properties of its own for this — it exposes
-`FailedEventPublications.resubmit(ResubmissionOptions)` and leaves the policy to the application.
+The `jeap-spring-modulith-error-handling-starter` owns the persistent retry and escalation policy for
+failed JDBC v2 publications.
 
-| Property                                                  | Value | Meaning                                                                                      |
-|-----------------------------------------------------------|-------|------------------------------------------------------------------------------------------------|
-| `jme.modulith.event-resubmission.interval`                | `5s`  | How often failed publications are looked at                                                     |
-| `jme.modulith.event-resubmission.min-age`                 | `2s`  | How old a failed publication must be before it is retried                                       |
-| `jme.modulith.event-resubmission.max-completion-attempts` | `3`   | Total invocations of the listener — Spring Modulith counts the initial one, so this is 1 + 2 retries |
+| Property                                               | Value                              | Meaning                                                                                   |
+|--------------------------------------------------------|------------------------------------|-------------------------------------------------------------------------------------------|
+| `jeap.modulith.error-handling.retry-interval`          | `5s`                               | How often retryable publications are selected                                             |
+| `jeap.modulith.error-handling.retry-min-age`           | `2s`                               | Minimum age of a failed publication before retry                                           |
+| `jeap.modulith.error-handling.max-completion-attempts` | `3`                                | Total listener invocations, including the initial one                                      |
+| `jeap.modulith.error-handling.reconciliation-interval` | `5s`                               | How often exhausted publications are reconciled                                            |
+| `jeap.modulith.error-handling.reconciliation-min-age`  | `2s`                               | Minimum age before escalation                                                              |
+| `jeap.modulith.error-handling.failure-event-topic`     | `jme-messageprocessing-failed`     | Topic carrying `ModulithPublicationProcessingFailedEvent`                                  |
+| `jeap.modulith.error-handling.retry-command-topic`     | `jme-retry-modulith-publication`   | Topic carrying `RetryModulithPublicationCommand`                                           |
+| `jeap.modulith.error-handling.discard-command-topic`   | `jme-discard-modulith-publication` | Topic carrying `DiscardModulithPublicationCommand`                                         |
 
 The values are deliberately impatient so the behaviour is observable while trying out the example. A
-real service would use a longer interval and a back-off.
+real service would use longer intervals. `completion_attempts` keeps the retry budget across restarts.
+Once the budget is exhausted, the starter publishes a failure event through the transactional outbox
+and records `(publication_id, completion_attempts)` in `modulith_publication_failure`. The Error
+Handling Service stores the event with origin `MODULITH_PUBLICATION` and publishes a UUID-exact retry
+or discard command when an operator acts on it.
 
 ## Error handling service
 
@@ -166,4 +173,4 @@ configured registry. Image names in the test code stay plain.
 ## Related
 
 - [Architecture](architecture.md)
-- [Design: async event error handling](async-event-error-handling-design.md)
+- [Async event error handling](async-event-error-handling-design.md)

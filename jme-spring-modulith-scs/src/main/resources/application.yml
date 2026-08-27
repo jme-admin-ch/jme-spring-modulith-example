@@ -26,26 +26,27 @@ spring:
       completion-mode: update
       # A publication left behind by a crashed instance would otherwise stay PROCESSING or RESUBMITTED
       # forever and never be picked up again. This marks such publications FAILED, which makes them
-      # eligible for the resubmission in FailedEventPublicationResubmitter.
+      # eligible for the starter's scheduled resubmission.
       staleness:
         check-intervall: 30s
         processing: 2m
         resubmitted: 2m
-
-# Retry policy for failed internal asynchronous events, applied by FailedEventPublicationResubmitter.
-# The values are deliberately impatient so the behaviour is observable while trying out the example.
-jme:
-  modulith:
-    event-resubmission:
-      interval: 5s
-      min-age: 2s
-      max-completion-attempts: 3
 
 server:
   servlet:
     context-path: /jme-spring-modulith-scs
 
 jeap:
+  modulith:
+    error-handling:
+      retry-interval: 5s
+      retry-min-age: 2s
+      max-completion-attempts: 3
+      reconciliation-interval: 5s
+      reconciliation-min-age: 2s
+      failure-event-topic: jme-messageprocessing-failed
+      retry-command-topic: jme-retry-modulith-publication
+      discard-command-topic: jme-discard-modulith-publication
   messaging:
     kafka:
       # Failed message processing is reported on this topic, which jme-spring-modulith-error-scs

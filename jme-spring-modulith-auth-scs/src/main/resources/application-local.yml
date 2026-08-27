@@ -9,6 +9,20 @@ oauth-mock-data:
 
   clients:
 
+    # Browser client used by the Error Handling UI for the authorization-code flow.
+    - client-id: "error-handling-ui"
+      context: "USER"
+      registered-redirect-uri:
+        - "http://localhost:8092/error-handling/redirect"
+        - "http://localhost:8092/error-handling/assets/auth/silent-renew.html"
+      userroles:
+        - "jme_@error_#view"
+        - "jme_@error_#retry"
+        - "jme_@error_#delete"
+        - "jme_@errorgroup_#view"
+        - "jme_@errorgroup_#edit"
+      audience: [ "jme-spring-modulith-error-scs" ]
+
     # Client used by the README examples and by the integration tests to call the REST API of
     # jme-spring-modulith-scs. It carries one semantic role per application module of the modulith.
     - client-id: "jme-spring-modulith-client"

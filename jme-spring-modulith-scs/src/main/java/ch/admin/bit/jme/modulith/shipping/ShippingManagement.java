@@ -45,7 +45,7 @@ public class ShippingManagement {
      * {@code event_publication} and its own transaction.
      * <p>
      * A failed publication is retried by
-     * {@link ch.admin.bit.jme.modulith.FailedEventPublicationResubmitter}, which is where the retry
+     * the Modulith error handling starter, which is where the retry
      * budget is configured.
      */
     @ApplicationModuleListener

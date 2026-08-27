@@ -1,8 +1,8 @@
 # Architecture
 
 How this example is put together and what happens at runtime. See [Configuration](configuration.md)
-for the properties behind it and [the design doc](async-event-error-handling-design.md) for the
-planned escalation of failed internal asynchronous events.
+for the properties behind it and [async event error handling](async-event-error-handling-design.md)
+for the retry, escalation and operator-command design.
 
 ## Deployment view
 
@@ -148,9 +148,11 @@ flowchart TB
     C -->|" any other order type "| ORD["order: publish OrderCompleted"]
     ORD --> REG[("event_publication")]
     REG -->|" FAIL_ASYNC<br/>shipping listener throws "| F["publication marked FAILED"]
-    F --> RS["FailedEventPublicationResubmitter"]
-    RS -->|" retries left "| REG
-    RS -->|" retries exhausted "| X["onRetriesExhausted()<br/><b>bridge to the EHS: planned</b>"]
+    F --> STARTER["jEAP Spring Modulith<br/>error handling starter"]
+    STARTER -->|" retries left "| REG
+    STARTER -->|" retries exhausted "| OUTBOX["transactional outbox"]
+    OUTBOX -->|" ModulithPublicationProcessingFailedEvent "| ET
+    EHS -->|" Retry / Discard command "| STARTER
 ```
 
 ### Path 1 — a Kafka message that cannot be consumed
@@ -177,56 +179,72 @@ published.
 
 ### Path 2 — an internal asynchronous event that cannot be processed
 
-Asynchronous, and **not** covered by the jEAP error handling today. The Kafka message is consumed
-successfully, the order is registered, `OrderCompleted` is published — and then the `shipping`
-listener throws for an order of type `FAIL_ASYNC`.
+Asynchronous, and handled by the jEAP Spring Modulith error handling starter. The Kafka message is
+consumed successfully, the order is registered, `OrderCompleted` is published — and then the
+`shipping` listener throws for an order of type `FAIL_ASYNC`.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant REG as event_publication
     participant SHI as shipping
-    participant RS as FailedEventPublicationResubmitter
+    participant ST as Modulith error handling starter
+    participant OB as transactional outbox
+    participant EHS as Error Handling Service
 
     REG->>SHI: on(OrderCompleted) — attempt 1
     SHI--xREG: throws → status FAILED
 
     loop every 5s, while completion_attempts < 3
-        RS->>REG: resubmit(minAge 2s, filter)
+        ST->>REG: select and resubmit publication
         REG->>REG: completion_attempts++, status RESUBMITTED
         REG->>SHI: on(OrderCompleted) — attempt 2, 3
         SHI--xREG: throws → status FAILED
     end
 
-    RS->>RS: completion_attempts == 3 → onRetriesExhausted()
-    Note over RS: today: reported once.<br/>planned: escalate to the EHS
+    ST->>REG: reconcile exhausted generation
+    ST->>OB: persist ModulithPublicationProcessingFailedEvent
+    OB->>EHS: publish failure event
+    EHS->>EHS: persist origin MODULITH_PUBLICATION
+    alt operator retries
+        EHS->>ST: RetryModulithPublicationCommand(publicationId)
+        ST->>REG: resubmit exactly that publication
+    else operator discards
+        EHS->>ST: DiscardModulithPublicationCommand(publicationId)
+        ST->>REG: complete exactly that publication
+    end
 ```
 
 The publications of the `inventory` and `notification` listeners of the *same* event are unaffected
 and reach `COMPLETED` — each listener has its own row and its own transaction.
 
-Spring Modulith persists failed publications but does not retry them on a schedule by itself: it
-offers `FailedEventPublications.resubmit(ResubmissionOptions)` and leaves the policy to the
-application. `FailedEventPublicationResubmitter` is that policy.
+Spring Modulith persists failed publications but does not supply the operational policy. The starter
+uses the public registry API for UUID-exact commands and PostgreSQL queries against the JDBC v2 schema
+for durable scheduled selection. Its reconciliation sweep is authoritative; the listener-failure
+advisor only provides a low-latency escalation attempt.
 
 Note that Spring Modulith counts the **initial** invocation as the first completion attempt, so
 `max-completion-attempts: 3` means the listener runs three times in total.
 
-What happens after the retries are exhausted is where this example stops today: the publication stays
-`FAILED` in the registry and the failure is reported once. Closing that gap is the subject of
-[the design doc](async-event-error-handling-design.md).
+After retries are exhausted, the publication stays `FAILED` so it remains addressable. Escalation is
+idempotent for `(publication_id, completion_attempts)`. A retry that fails again increments the durable
+counter and therefore forms a new generation that can be escalated once without duplicating the old
+EHS error. A discard marks the publication `COMPLETED` without invoking the listener.
 
 ## Persistence
 
 One PostgreSQL per service, schema owned by Flyway (`spring.jpa.hibernate.ddl-auto: validate`).
 
-| Table               | Owner                   | Migration                      |
-|---------------------|-------------------------|--------------------------------|
-| `event_publication` | Spring Modulith         | `V1__event_publication.sql`    |
-| `orders`            | `order` module          | `V2__application_modules.sql`  |
-| `stock_reservation` | `inventory` module      | `V2__application_modules.sql`  |
-| `notification`      | `notification` module   | `V2__application_modules.sql`  |
-| `shipment`          | `shipping` module       | `V3__shipping.sql`             |
+| Table                          | Owner                          | Migration                            |
+|--------------------------------|--------------------------------|--------------------------------------|
+| `event_publication`            | Spring Modulith                | `V1__event_publication.sql`          |
+| `orders`                       | `order` module                 | `V2__application_modules.sql`        |
+| `stock_reservation`            | `inventory` module             | `V2__application_modules.sql`        |
+| `notification`                 | `notification` module          | `V2__application_modules.sql`        |
+| `shipment`                     | `shipping` module              | `V3__shipping.sql`                   |
+| `modulith_publication_failure` | Modulith error handling starter | `V4__modulith_error_handling.sql`    |
+| `deferred_message`             | jEAP transactional outbox      | `V4__modulith_error_handling.sql`    |
+| `shedlock`                     | scheduled job coordination     | `V4__modulith_error_handling.sql`    |
 
 The modules do not share tables: each owns its own data and the others reach it only through the
 module's API.
@@ -267,7 +285,7 @@ Two properties of this fall out of the model rather than being coded:
 | `OrderApiSecurityTests`         | `jme-spring-modulith-scs`  | Semantic role authorization through MockMvc                                            |
 | `SpringModulithExampleIT`       | `jme-spring-modulith-test` | The happy path end to end, plus 401/403 against the running service                    |
 | `ErrorHandlingIT`               | `jme-spring-modulith-test` | Both Kafka consumption failures, asserted through the EHS query API                    |
-| `InternalAsyncEventRetryIT`     | `jme-spring-modulith-test` | The failing internal event, its retries and their exhaustion                           |
+| `InternalAsyncEventRetryIT`     | `jme-spring-modulith-test` | The failing internal event and the starter's persistent retry budget                    |
 
 `@ApplicationModuleTest` bootstraps a single module, so a hidden dependency on another module shows up
 as a missing bean rather than passing unnoticed. The module tests run against a PostgreSQL started by
@@ -277,5 +295,5 @@ subprocesses.
 ## Related
 
 - [Configuration](configuration.md)
-- [Design: async event error handling](async-event-error-handling-design.md)
+- [Async event error handling](async-event-error-handling-design.md)
 - [Root README](../README.md)

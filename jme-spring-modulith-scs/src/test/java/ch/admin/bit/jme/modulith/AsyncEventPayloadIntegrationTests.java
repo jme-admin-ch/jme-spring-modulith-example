@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Establishes how the planned error handling bridge can put the failed event's payload into the
+ * Establishes how the error handling integration can put the failed event's payload into the
  * {@code ModulithPublicationProcessingFailedEvent}, so the Error Handling Service can show an operator
  * what actually failed.
  * <p>
@@ -34,17 +34,14 @@ import static org.awaitility.Awaitility.await;
  * alternative asserted here is Spring Modulith's own {@link EventSerializer}: it is the extension point
  * that produced the stored form in the first place, it is a public bean, and running it over the live
  * event object yields **exactly the bytes stored in {@code event_publication.serialized_event}**. No
- * JDBC access and no deserialization are needed. The bridge reports the payload as
+ * JDBC access and no deserialization are needed. The failure event reports the payload as
  * {@code application/json}, matching Spring Modulith's default Jackson serializer.
  * <p>
  * The extraction is best effort: an event that cannot be serialized produces no payload rather than a
  * failed escalation, and an oversized payload is truncated. See
  * {@code docs/async-event-error-handling-design.md}.
  */
-@SpringBootTest(properties = {
-        "jme.modulith.event-resubmission.interval=1h",
-        "jme.modulith.event-resubmission.max-completion-attempts=1"
-})
+@SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class AsyncEventPayloadIntegrationTests {
@@ -126,7 +123,7 @@ class AsyncEventPayloadIntegrationTests {
     }
 
     /**
-     * What the bridge will do, in the shape it will do it: serialize with Spring Modulith's own
+     * The payload behavior required from the starter: serialize with Spring Modulith's own
      * serializer, cap the size, and give up quietly if that is not possible.
      */
     private Optional<byte[]> payloadOf(Object event) {

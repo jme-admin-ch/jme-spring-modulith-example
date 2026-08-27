@@ -5,7 +5,7 @@
  * <p>
  * It exists to demonstrate what happens when an internal asynchronous event cannot be processed — the
  * Spring Modulith event publication registry marks the publication {@code FAILED} and the resubmission
- * configured in {@link ch.admin.bit.jme.modulith.FailedEventPublicationResubmitter} retries it, while
+ * configured by the Modulith error handling starter retries it, while
  * the other two listeners of the same event complete unaffected.
  */
 @org.springframework.modulith.ApplicationModule(

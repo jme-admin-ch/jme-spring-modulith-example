@@ -47,10 +47,7 @@ import static org.awaitility.Awaitility.await;
  * It also shows the limit of the hook: it fires on <em>every</em> failed attempt, including retries, so
  * "retries exhausted" is a decision the handler has to make itself.
  */
-@SpringBootTest(properties = {
-        "jme.modulith.event-resubmission.interval=1h",
-        "jme.modulith.event-resubmission.max-completion-attempts=1"
-})
+@SpringBootTest
 @Import({TestcontainersConfiguration.class, AsyncEventFailureNotificationIntegrationTests.RecordingAsyncFailures.class})
 @ActiveProfiles("test")
 class AsyncEventFailureNotificationIntegrationTests {
