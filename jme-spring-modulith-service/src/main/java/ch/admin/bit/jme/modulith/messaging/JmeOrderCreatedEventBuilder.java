@@ -16,7 +16,7 @@ class JmeOrderCreatedEventBuilder extends AvroDomainEventBuilder<JmeOrderCreated
 
     private final String systemName = "JME";
     private final String eventName = "JmeOrderCreatedEvent";
-    private final String serviceName = "jme-spring-modulith-scs";
+    private final String serviceName = "jme-spring-modulith-service";
 
     private String orderId;
     private String orderType;

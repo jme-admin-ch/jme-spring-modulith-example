@@ -10,7 +10,7 @@ one jme example can run at a time. The services themselves use a range of their 
 
 | Port   | What                                                       |
 |--------|------------------------------------------------------------|
-| `8090` | `jme-spring-modulith-scs`, context path `/jme-spring-modulith-scs` |
+| `8090` | `jme-spring-modulith-service`, context path `/jme-spring-modulith-service` |
 | `8091` | `jme-spring-modulith-auth-scs`, context path `/jme-spring-modulith-auth-scs` |
 | `8092` | `jme-spring-modulith-error-scs`, context path `/error-handling` |
 | `9092` | Kafka broker (SASL_PLAINTEXT, SCRAM-SHA-512, `user`/`user-secret`) |
@@ -18,9 +18,9 @@ one jme example can run at a time. The services themselves use a range of their 
 | `5540` | PostgreSQL of the modulith service (`modulith`/`secret`)   |
 | `5541` | PostgreSQL of the error handling service (`errorhandling`/`secret`) |
 
-The context path of the error handling service is `/error-handling` because the jEAP error handling UI
-expects it there. This example ships no UI, but keeping the path means a locally running instance of
-that UI can be pointed at it unchanged.
+The Error Handling Service dependency includes its UI under `/error-handling`. The OAuth mock allows
+its login and post-logout redirects, including the exact local logout target
+`http://localhost:8092/error-handling/`.
 
 ## Topics
 
@@ -37,19 +37,20 @@ constant on the generated `TypeRef`, so it is never spelled out in the code.
 
 ## Spring Modulith
 
-`jme-spring-modulith-scs/src/main/resources/application.yml`:
+`jme-spring-modulith-service/src/main/resources/application.yml`:
 
 | Property                                                        | Value    | Why                                                                                                     |
 |-----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------|
 | `spring.modulith.events.jdbc.schema-initialization.enabled`     | `false`  | The `event_publication` table is owned by Flyway (`V1__event_publication.sql`), like every other table    |
 | `spring.modulith.events.completion-mode`                        | `update` | Keep publications after completion instead of deleting or archiving them, so failures stay inspectable    |
-| `spring.modulith.events.republish-outstanding-events-on-restart`| `true`   | Republish publications an instance was still working on when it went down                                 |
+| `spring.modulith.events.republish-outstanding-events-on-restart`| `false`  | Prevent startup from replaying incomplete publications outside the starter's retry budget                 |
 | `spring.modulith.events.staleness.check-intervall`              | `30s`    | How often to look for publications that got stuck                                                         |
+| `spring.modulith.events.staleness.published`                    | `2m`     | Mark an old never-started publication failed so the starter applies its retry policy                      |
 | `spring.modulith.events.staleness.processing`                   | `2m`     | After this, a publication stuck in `PROCESSING` is marked `FAILED` and becomes retryable again             |
 | `spring.modulith.events.staleness.resubmitted`                  | `2m`     | The same for a publication stuck in `RESUBMITTED`                                                          |
 
-> The property is `republish-outstanding-**events**-on-restart`. The plausible-looking
-> `republish-outstanding-publications-on-restart` is not a property and is silently ignored.
+All incomplete states recover by first becoming `FAILED`. The starter's generation-aware database
+claim then remains the only path that increments attempts and enforces `max-completion-attempts`.
 
 The staleness monitor and the starter's retry and reconciliation loops are scheduled tasks, so
 `Application` is annotated `@EnableScheduling`.
@@ -92,10 +93,10 @@ or discard command on the consumed Kafka cluster when an operator acts on it.
 | `jeap.errorhandling.resend.default-resending-strategy.max-retries`    | `3`                                | Resends of a temporary failure before it becomes permanent       |
 | `jeap.errorhandling.resend.default-resending-strategy.delay`          | `10s`                              | Between resends                                                  |
 | `jeap.errorhandling.task-management.service.enabled`                  | `false`                            | No Agir integration in this example                              |
-| `jeap.errorhandling.frontend.*`                                       | set                                | Mandatory even without a UI — the service validates them at startup |
+| `jeap.errorhandling.frontend.*`                                       | set                                | Configuration served to the bundled UI, including the local logout redirect |
 
 On the consumer side the entire wiring to the error handling service is a single property in
-`jme-spring-modulith-scs`:
+`jme-spring-modulith-service`:
 
 ```yaml
 jeap:
@@ -123,8 +124,8 @@ client-credentials grant:
 
 | Client                                    | Roles                                             | Audience                        | Used by                                    |
 |-------------------------------------------|---------------------------------------------------|---------------------------------|--------------------------------------------|
-| `jme-spring-modulith-client`              | one per application module                        | `jme-spring-modulith-scs`       | the README walkthrough, the tests          |
-| `jme-spring-modulith-client-without-roles`| `jme_@unrelated_#read`                            | `jme-spring-modulith-scs`       | demonstrating the 403 path                 |
+| `jme-spring-modulith-client`              | one per application module                        | `jme-spring-modulith-service`   | the README walkthrough, the tests          |
+| `jme-spring-modulith-client-without-roles`| `jme_@unrelated_#read`                            | `jme-spring-modulith-service`   | demonstrating the 403 path                 |
 | `jme-spring-modulith-error-client`        | `jme_@error_#view/#retry/#delete`, `jme_@errorgroup_#view/#edit` | `jme-spring-modulith-error-scs` | querying the error handling service        |
 | `jme-spring-modulith-error-service`       | the same error roles                              | `jme-spring-modulith-error-scs` | the error handling service's own outgoing calls |
 
@@ -170,7 +171,7 @@ The integration tests resolve `local` or `local,ci` through
 
 ## Testcontainers
 
-`jme-spring-modulith-scs/src/test/resources/testcontainers.properties` sets `hub.image.name.prefix`, so
+`jme-spring-modulith-service/src/test/resources/testcontainers.properties` sets `hub.image.name.prefix`, so
 the PostgreSQL image and the Ryuk sidecar Testcontainers starts itself are both pulled from the
 configured registry. Image names in the test code stay plain.
 

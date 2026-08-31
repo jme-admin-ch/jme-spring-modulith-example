@@ -11,7 +11,7 @@ Three runnable services and the infrastructure from `docker/docker-compose.yml`:
 ```mermaid
 flowchart TB
     subgraph services["Maven modules of this repository"]
-        SCS["jme-spring-modulith-scs<br/>the Spring Modulith service<br/>:8090"]
+        SCS["jme-spring-modulith-service<br/>the Spring Modulith service<br/>:8090"]
         AUTH["jme-spring-modulith-auth-scs<br/>jEAP OAuth mock server<br/>:8091"]
         EHS["jme-spring-modulith-error-scs<br/>jEAP Error Handling Service<br/>:8092"]
     end
@@ -226,6 +226,11 @@ advisor only provides a low-latency escalation attempt.
 Note that Spring Modulith counts the **initial** invocation as the first completion attempt, so
 `max-completion-attempts: 3` means the listener runs three times in total.
 
+Spring Modulith's broad startup republication is disabled. Old `PUBLISHED`, `PROCESSING` and
+`RESUBMITTED` rows are first recovered to `FAILED` by the staleness monitor, after which the starter's
+generation-aware claim applies the durable completion-attempt budget. An exhausted `FAILED` row is
+therefore not blindly invoked after a process restart.
+
 After retries are exhausted, the publication stays `FAILED` so it remains addressable. Escalation is
 idempotent for `(publication_id, completion_attempts)`. A retry that fails again increments the durable
 counter and therefore forms a new generation that can be escalated once without duplicating the old
@@ -278,14 +283,15 @@ Two properties of this fall out of the model rather than being coded:
 
 | Test                            | Module                     | What it covers                                                                     |
 |---------------------------------|----------------------------|--------------------------------------------------------------------------------------|
-| `ModularityTests`               | `jme-spring-modulith-scs`  | The module arrangement — fails the build on an illegal dependency or a cycle          |
-| `DocumentationTests`            | `jme-spring-modulith-scs`  | Generates the module documentation and asserts the expected files are produced        |
-| `OrderIntegrationTests`         | `jme-spring-modulith-scs`  | `@ApplicationModuleTest` slice of `order`, including event publication and idempotence |
-| `InventoryIntegrationTests`     | `jme-spring-modulith-scs`  | `@ApplicationModuleTest` slice of `inventory`, driven by a published `OrderCompleted`  |
-| `OrderApiSecurityTests`         | `jme-spring-modulith-scs`  | Semantic role authorization through MockMvc                                            |
+| `ModularityTests`               | `jme-spring-modulith-service` | The module arrangement — fails the build on an illegal dependency or a cycle          |
+| `DocumentationTests`            | `jme-spring-modulith-service` | Generates the module documentation and asserts the expected files are produced        |
+| `OrderIntegrationTests`         | `jme-spring-modulith-service` | `@ApplicationModuleTest` slice of `order`, including event publication and idempotence |
+| `InventoryIntegrationTests`     | `jme-spring-modulith-service` | `@ApplicationModuleTest` slice of `inventory`, driven by a published `OrderCompleted`  |
+| `OrderApiSecurityTests`         | `jme-spring-modulith-service` | Semantic role authorization through MockMvc                                            |
+| `EventPublicationRecoveryConfigurationTests` | `jme-spring-modulith-service` | Budget-aware restart and staleness recovery configuration                 |
 | `SpringModulithExampleIT`       | `jme-spring-modulith-test` | The happy path end to end, plus 401/403 against the running service                    |
 | `ErrorHandlingIT`               | `jme-spring-modulith-test` | Both Kafka consumption failures, asserted through the EHS query API                    |
-| `InternalAsyncEventRetryIT`     | `jme-spring-modulith-test` | The failing internal event and the starter's persistent retry budget                    |
+| `InternalAsyncEventRetryIT`     | `jme-spring-modulith-test` | Full automatic retry, EHS generation, duplicate, retry and discard flow                  |
 
 `@ApplicationModuleTest` bootstraps a single module, so a hidden dependency on another module shows up
 as a missing bean rather than passing unnoticed. The module tests run against a PostgreSQL started by

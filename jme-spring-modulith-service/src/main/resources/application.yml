@@ -1,6 +1,6 @@
 spring:
   application:
-    name: jme-spring-modulith-scs
+    name: jme-spring-modulith-service
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     driver-class-name: org.postgresql.Driver
@@ -19,8 +19,9 @@ spring:
         # The event_publication table is created by V1__event_publication.sql
         schema-initialization:
           enabled: false
-      # Republish publications that were still incomplete when the application last shut down
-      republish-outstanding-events-on-restart: true
+      # Recovery must go through staleness detection and the starter so the durable retry budget is
+      # applied. Spring Modulith's startup republisher would invoke every incomplete publication.
+      republish-outstanding-events-on-restart: false
       # Keep failed publications in the registry (the default) instead of deleting or archiving them
       # on completion, so a failed listener leaves a row that can be inspected and resubmitted.
       completion-mode: update
@@ -29,12 +30,13 @@ spring:
       # eligible for the starter's scheduled resubmission.
       staleness:
         check-intervall: 30s
+        published: 2m
         processing: 2m
         resubmitted: 2m
 
 server:
   servlet:
-    context-path: /jme-spring-modulith-scs
+    context-path: /jme-spring-modulith-service
 
 jeap:
   modulith:

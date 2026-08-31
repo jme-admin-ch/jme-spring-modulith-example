@@ -97,13 +97,13 @@ locks, using the application database and database time.
 
 ## Message contracts
 
-All contracts are version `1.0.0`:
+The failure event stays on `1.0.0`; generation-safe commands use `1.1.0`:
 
-| Type | Artifact id |
-|---|---|
-| `ModulithPublicationProcessingFailedEvent` | `modulith-publication-processing-failed-event` |
-| `RetryModulithPublicationCommand` | `retry-modulith-publication-command` |
-| `DiscardModulithPublicationCommand` | `discard-modulith-publication-command` |
+| Type | Artifact id | Version |
+|---|---|---|
+| `ModulithPublicationProcessingFailedEvent` | `modulith-publication-processing-failed-event` | `1.0.0` |
+| `RetryModulithPublicationCommand` | `retry-modulith-publication-command` | `1.1.0` |
+| `DiscardModulithPublicationCommand` | `discard-modulith-publication-command` | `1.1.0` |
 
 All three use the Spring Modulith publication UUID as their reference. A publication identifies one
 listener's delivery of one event, which is precisely the unit that can be retried or discarded.
@@ -132,10 +132,12 @@ the database primary key.
 
 ### Retry and discard commands
 
-Both commands reference the publication UUID. The discard command additionally carries the operator's
-reason when available. The application declares producer and consumer contracts on its configured
-topics. The EHS persists the cluster on which it consumed the failure event and selects that cluster's outbox for the
-command, without a default-cluster fallback. In this example the topics are:
+Both commands reference the publication UUID and the failure event identity that reported its exact
+completion-attempt generation. The discard command additionally carries the operator's reason when
+available. Missing, duplicate, or stale generation tokens are acknowledged as no-ops. The application
+declares producer and consumer contracts on its configured topics. The EHS persists the cluster on
+which it consumed the failure event and selects that cluster's outbox for the command, without a
+default-cluster fallback. In this example the topics are:
 
 | Direction | Topic |
 |---|---|
@@ -184,9 +186,10 @@ sequenceDiagram
     end
 ```
 
-The commands are idempotent. Retry is a no-op when the referenced publication is no longer failed;
-discard atomically updates only a matching `FAILED` row. Duplicate Kafka delivery therefore cannot
-re-run a completed listener or alter an unrelated publication.
+The commands are idempotent and generation exact. Retry claims the referenced publication only while
+its current failed generation still matches the reporting failure event; discard uses the same token
+in its atomic update. Duplicate Kafka delivery and actions from an older EHS error therefore cannot
+re-run a newer generation, re-run a completed listener, or alter an unrelated publication.
 
 ## Why discard marks the publication completed
 
@@ -212,6 +215,8 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Immediate path and reconciliation race | The generation primary key lets only one publish transaction win |
 | Two application instances reconcile concurrently | ShedLock serializes scheduled sweeps; the database uniqueness constraint remains the final guard |
 | EHS Kafka cluster configuration changes while an error is open | Retry or discard fails and leaves the error open if the stored cluster no longer has an outbox |
+| Several services share a command topic | Unsupported for now: the transactional outbox cannot persist the `jeap_eh_target_service` header, so applications must use service-specific retry and discard topics |
+| A cluster is removed after a command was persisted | The outbox relay can fall back to the default producer cluster; operators must keep the original cluster configured until pending commands have been relayed |
 | Retry command is delivered twice | Only the first command can claim the failed publication |
 | Discard command is delivered twice | The second conditional update is a no-op |
 | Retry fails again | The incremented completion attempt creates one new EHS generation |
@@ -222,15 +227,12 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Piece | Where |
 |---|---|
 | Listener that fails on demand | `shipping` module, order type `FAIL_ASYNC` |
-| Retry, reconciliation and command configuration | `jme-spring-modulith-scs/src/main/resources/application.yml` |
+| Retry, reconciliation and command configuration | `jme-spring-modulith-service/src/main/resources/application.yml` |
 | Application-owned schema | `V4__modulith_error_handling.sql` |
-| Spring Modulith API behavior | `AsyncEventFailureHooksIntegrationTests` |
-| Listener failure notification behavior | `AsyncEventFailureNotificationIntegrationTests` |
-| Best-effort payload extraction | `AsyncEventPayloadIntegrationTests` |
-| End-to-end automatic retry budget | `InternalAsyncEventRetryIT` |
+| Restart and staleness policy | `EventPublicationRecoveryConfigurationTests` |
+| Complete running-system failure lifecycle | `InternalAsyncEventRetryIT` |
 | Running EHS and OAuth mock | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs` |
 
-The retry and discard paths were additionally verified against running JME, Kafka, PostgreSQL and EHS
-instances: retry incremented the targeted listener's completion attempts and changed the EHS state to
-`PERMANENT_RETRIED`; discard changed the EHS state to `DELETED` and the targeted publication to
-`COMPLETED` without invoking its listener.
+`InternalAsyncEventRetryIT` verifies the running JME, Kafka, PostgreSQL and EHS instances directly. It
+asserts the EHS projection and payload, one error per generation, one listener call for an EHS retry,
+a stale duplicated command as a no-op, and discard to `COMPLETED` without another listener call.

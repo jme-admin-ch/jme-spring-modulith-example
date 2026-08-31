@@ -10,12 +10,12 @@ import static io.restassured.RestAssured.given;
 
 /**
  * Common setup for the integration tests: the URLs of the three services, the access tokens issued by
- * the OAuth mock server, and the calls against the REST API of jme-spring-modulith-scs.
+ * the OAuth mock server, and the calls against the REST API of jme-spring-modulith-service.
  */
 abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationTestBase {
 
     static final String AUTH_BASE_URL = "http://localhost:8091/jme-spring-modulith-auth-scs";
-    static final String SCS_BASE_URL = "http://localhost:8090/jme-spring-modulith-scs";
+    static final String SERVICE_BASE_URL = "http://localhost:8090/jme-spring-modulith-service";
     static final String ERROR_SCS_BASE_URL = "http://localhost:8092/error-handling";
 
     /** Client carrying one semantic role per application module, see the auth-scs application-local.yml. */
@@ -29,7 +29,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
     static void startAllServices() throws Exception {
         startService("jme-spring-modulith-auth-scs", AUTH_BASE_URL);
         startService("jme-spring-modulith-error-scs", ERROR_SCS_BASE_URL);
-        startService("jme-spring-modulith-scs", SCS_BASE_URL);
+        startService("jme-spring-modulith-service", SERVICE_BASE_URL);
     }
 
     String accessToken() {
@@ -50,7 +50,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
      */
     String publishOrderCreatedEvent(String token, String orderId, String orderType) {
         return given()
-                .baseUri(SCS_BASE_URL)
+                .baseUri(SERVICE_BASE_URL)
                 .auth().oauth2(token)
                 .queryParam("orderId", orderId)
                 .queryParam("orderType", orderType)
@@ -63,7 +63,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
 
     Response get(String token, String path) {
         return given()
-                .baseUri(SCS_BASE_URL)
+                .baseUri(SERVICE_BASE_URL)
                 .auth().oauth2(token)
                 .accept(ContentType.JSON)
                 .when()

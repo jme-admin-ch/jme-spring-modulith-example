@@ -14,7 +14,7 @@ jeap:
   errorhandling:
     frontend:
       applicationUrl: http://localhost:8092/error-handling
-      logoutRedirectUri: http://localhost:4199/
+      logoutRedirectUri: http://localhost:8092/error-handling/
       pamsEnabled: false
 
     resend:

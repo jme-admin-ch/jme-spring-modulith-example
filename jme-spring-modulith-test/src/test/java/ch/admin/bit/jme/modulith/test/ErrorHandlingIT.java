@@ -22,7 +22,7 @@ class ErrorHandlingIT extends SpringModulithExampleITBase {
     @BeforeAll
     static void startServices() throws Exception {
         startAllServices();
-        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-scs",
+        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-service",
                 JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-error-scs",
                 "jme-messageprocessing-failed");
@@ -59,6 +59,28 @@ class ErrorHandlingIT extends SpringModulithExampleITBase {
 
         String errorToken = errorHandlingAccessToken();
         await().untilAsserted(() -> assertThat(errorCountForTrace(errorToken, traceId)).isPositive());
+    }
+
+    @Test
+    void bundledUiAndItsLocalAuthenticationConfigurationAreAvailable() {
+        given()
+                .baseUri(ERROR_SCS_BASE_URL)
+                .when()
+                .get("/")
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.HTML);
+
+        given()
+                .baseUri(ERROR_SCS_BASE_URL)
+                .when()
+                .get("/api/configuration")
+                .then()
+                .statusCode(200)
+                .body("applicationUrl", org.hamcrest.Matchers.equalTo(ERROR_SCS_BASE_URL))
+                .body("logoutRedirectUri", org.hamcrest.Matchers.equalTo(ERROR_SCS_BASE_URL + "/"))
+                .body("authority", org.hamcrest.Matchers.equalTo(AUTH_BASE_URL))
+                .body("clientId", org.hamcrest.Matchers.equalTo("error-handling-ui"));
     }
 
     private int errorCountForTrace(String errorToken, String traceId) {

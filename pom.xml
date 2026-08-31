@@ -43,19 +43,20 @@
     </description>
 
     <modules>
-        <module>jme-spring-modulith-scs</module>
+        <module>jme-spring-modulith-service</module>
         <module>jme-spring-modulith-auth-scs</module>
         <module>jme-spring-modulith-error-scs</module>
         <module>jme-spring-modulith-test</module>
     </modules>
 
     <properties>
-        <jeap-oauth-mock-server.version>8.6.0</jeap-oauth-mock-server.version>
+        <jeap-oauth-mock-server.version>10.3.0-SNAPSHOT</jeap-oauth-mock-server.version>
         <jeap-error-handling-service.version>23.0.0-SNAPSHOT</jeap-error-handling-service.version>
         <jeap-spring-modulith-error-handling-starter.version>1.0.0-SNAPSHOT</jeap-spring-modulith-error-handling-starter.version>
         <jme-spring-boot-integration-test.version>5.12.0</jme-spring-boot-integration-test.version>
         <jme-order-created-event.version>1.0.0</jme-order-created-event.version>
-        <modulith-publication-message-types.version>1.0.0</modulith-publication-message-types.version>
+        <modulith-publication-failure-event.version>1.0.0</modulith-publication-failure-event.version>
+        <modulith-publication-command.version>1.1.0</modulith-publication-command.version>
         <!-- Spring Modulith is not managed by the jEAP parent, its BOM is imported below.
              2.1.0 is built against Spring Boot 4.1.0, the version the jEAP parent brings in. -->
         <spring-modulith.version>2.1.0</spring-modulith.version>
@@ -86,21 +87,21 @@
             <dependency>
                 <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
                 <artifactId>modulith-publication-processing-failed-event</artifactId>
-                <version>${modulith-publication-message-types.version}</version>
+                <version>${modulith-publication-failure-event.version}</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
                 <artifactId>retry-modulith-publication-command</artifactId>
-                <version>${modulith-publication-message-types.version}</version>
+                <version>${modulith-publication-command.version}</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
                 <artifactId>discard-modulith-publication-command</artifactId>
-                <version>${modulith-publication-message-types.version}</version>
+                <version>${modulith-publication-command.version}</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>jme-spring-modulith-scs</artifactId>
+                <artifactId>jme-spring-modulith-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -25,7 +25,7 @@ class SpringModulithExampleIT extends SpringModulithExampleITBase {
     @BeforeAll
     static void startServices() throws Exception {
         startAllServices();
-        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-scs",
+        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-service",
                 JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
     }
 
@@ -53,14 +53,14 @@ class SpringModulithExampleIT extends SpringModulithExampleITBase {
 
     @Test
     void restApiRejectsARequestWithoutAToken() {
-        given().baseUri(SCS_BASE_URL)
+        given().baseUri(SERVICE_BASE_URL)
                 .when().get("/api/orders")
                 .then().statusCode(401);
     }
 
     @Test
     void restApiRejectsATokenWithoutTheRequiredSemanticRole() {
-        given().baseUri(SCS_BASE_URL)
+        given().baseUri(SERVICE_BASE_URL)
                 .auth().oauth2(accessTokenWithoutRoles())
                 .when().get("/api/orders")
                 .then().statusCode(403);

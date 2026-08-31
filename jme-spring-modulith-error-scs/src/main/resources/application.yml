@@ -35,7 +35,7 @@ server:
 
 jeap:
   errorhandling:
-    # The topic failed message processing is reported on. jme-spring-modulith-scs publishes to the
+    # The topic failed message processing is reported on. jme-spring-modulith-service publishes to the
     # same topic via jeap.messaging.kafka.errorTopicName.
     topic: "jme-messageprocessing-failed"
     deadLetterTopicName: "jme-messageprocessing-deadletter"

@@ -16,7 +16,7 @@ service actually needs around it.
 
 The example consists of the following modules:
 
-* **jme-spring-modulith-scs**: The Spring Modulith service, with the application modules `order`,
+* **jme-spring-modulith-service**: The Spring Modulith service, with the application modules `order`,
   `inventory`, `notification`, `shipping` and `messaging`
 * **jme-spring-modulith-auth-scs**: An instance of the
   [jEAP OAuth mock server](https://github.com/jeap-admin-ch/jeap-oauth-mock-server) used as
@@ -80,8 +80,8 @@ At runtime, `/actuator/modulith` reports the module model of the running applica
 `DocumentationTests` generates the [Spring Modulith documentation](https://docs.spring.io/spring-modulith/reference/documentation.html)
 during the build, from the same module model the application runs on — so it cannot drift away from
 the code the way a hand-written architecture chapter does. After `./mvnw install` (or
-`./mvnw test -pl jme-spring-modulith-scs`) it can be inspected in
-`jme-spring-modulith-scs/target/spring-modulith-docs`:
+`./mvnw test -pl jme-spring-modulith-service`) it can be inspected in
+`jme-spring-modulith-service/target/spring-modulith-docs`:
 
 | File                    | Content                                                                                                                   |
 |-------------------------|---------------------------------------------------------------------------------------------------------------------------|
@@ -123,14 +123,13 @@ nor blocks the others.
 
 Delivery is tracked in the **event publication registry** (`spring-modulith-starter-jdbc`). Before a
 listener is invoked, a row is written to `event_publication`; it is marked `COMPLETED` when the
-listener returns normally and `FAILED` when it throws. Publications left behind by an instance that
-died mid-flight are republished on the next startup
-(`spring.modulith.events.republish-outstanding-events-on-restart`), and the staleness monitor
-(`spring.modulith.events.staleness.*`) marks publications that got stuck in `PROCESSING` as `FAILED`
-so they become eligible for a retry. Because a publication can be replayed, the listeners are
+listener returns normally and `FAILED` when it throws. Startup-wide republication is disabled because
+it would bypass the starter's retry policy. Instead, the staleness monitor marks old `PUBLISHED`,
+`PROCESSING` and `RESUBMITTED` publications `FAILED`; the starter then applies the same durable retry
+budget used for ordinary listener failures. Because a publication can be replayed, the listeners are
 idempotent.
 
-The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-scs/src/main/resources/db/migration/V1__event_publication.sql)
+The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-service/src/main/resources/db/migration/V1__event_publication.sql)
 rather than by Spring Modulith itself, because it holds application state that outlives a restart and
 therefore deserves a migration history like any other table.
 
@@ -238,12 +237,12 @@ Each service is started with the `local` profile, in this order:
 ```shell
 ./mvnw --projects jme-spring-modulith-auth-scs  spring-boot:run -Dspring-boot.run.profiles=local
 ./mvnw --projects jme-spring-modulith-error-scs spring-boot:run -Dspring-boot.run.profiles=local
-./mvnw --projects jme-spring-modulith-scs       spring-boot:run -Dspring-boot.run.profiles=local
+./mvnw --projects jme-spring-modulith-service   spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 | Service                         | URL                                              |
 |---------------------------------|--------------------------------------------------|
-| `jme-spring-modulith-scs`       | http://localhost:8090/jme-spring-modulith-scs     |
+| `jme-spring-modulith-service`   | http://localhost:8090/jme-spring-modulith-service |
 | `jme-spring-modulith-auth-scs`  | http://localhost:8091/jme-spring-modulith-auth-scs |
 | `jme-spring-modulith-error-scs` | http://localhost:8092/error-handling              |
 
@@ -267,17 +266,17 @@ with nothing but curl.
 
 ```shell
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-1&orderType=STANDARD"
+  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-1&orderType=STANDARD"
 ```
 
 The event is consumed by the `messaging` module, which registers the order in the `order` module,
 which publishes `OrderCompleted`, which the two other modules pick up asynchronously:
 
 ```shell
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/orders
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/inventory
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/notifications
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/shipments
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/orders
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/inventory
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/notifications
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/shipments
 ```
 
 The event publication registry shows one completed row per listener:
@@ -303,14 +302,14 @@ An order of type `FAIL_ASYNC` is consumed from Kafka without trouble and registe
 
 ```shell
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-3&orderType=FAIL_ASYNC"
+  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-3&orderType=FAIL_ASYNC"
 ```
 
 Watch the listener being retried, and stopping its automatic retries after the third attempt:
 
 ```shell
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8090/jme-spring-modulith-scs/api/shipments/attempts
+  http://localhost:8090/jme-spring-modulith-service/api/shipments/attempts
 # {"demo-3":1} … {"demo-3":2} … {"demo-3":3}  and then no further
 ```
 
@@ -332,7 +331,7 @@ or open its bundled UI at `http://localhost:8092/error-handling`.
 ### The module model at runtime
 
 ```shell
-curl -u actuator:secret http://localhost:8090/jme-spring-modulith-scs/actuator/modulith
+curl -u actuator:secret http://localhost:8090/jme-spring-modulith-service/actuator/modulith
 ```
 
 The endpoint is part of `spring-modulith-starter-insight`. The actuator security chain of
@@ -348,14 +347,14 @@ semantic role is rejected by method security:
 
 ```shell
 # 401 — no token
-curl -i http://localhost:8090/jme-spring-modulith-scs/api/orders
+curl -i http://localhost:8090/jme-spring-modulith-service/api/orders
 
 # 403 — authenticated, but the token carries no jme_@order_#read role
 NO_ROLES=$(curl -s -X POST http://localhost:8091/jme-spring-modulith-auth-scs/oauth2/token \
   -d grant_type=client_credentials \
   -d client_id=jme-spring-modulith-client-without-roles \
   -d client_secret=secret | jq -r .access_token)
-curl -i -H "Authorization: Bearer $NO_ROLES" http://localhost:8090/jme-spring-modulith-scs/api/orders
+curl -i -H "Authorization: Bearer $NO_ROLES" http://localhost:8090/jme-spring-modulith-service/api/orders
 ```
 
 ## Error handling
@@ -386,7 +385,7 @@ trace id that ties the call, the consumption and the resulting error entry toget
 
 ```shell
 TRACE=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-2&orderType=FAIL_PERMANENT" \
+  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-2&orderType=FAIL_PERMANENT" \
   | jq -r .traceId)
 
 # The error handling service has its own audience and roles, so it needs its own token
@@ -419,9 +418,9 @@ curl -X DELETE -H "Authorization: Bearer $ERROR_TOKEN" \
   "http://localhost:8092/error-handling/api/error/$ERROR_ID?reason=discarded-for-demo"
 ```
 
-Retry changes the original EHS entry to `PERMANENT_RETRIED`. If the listener fails again, the higher
-completion-attempt generation is eligible for a new EHS entry. Discard changes the EHS entry to
-`DELETED` and the referenced `event_publication` row to `COMPLETED`.
+Retry closes the original EHS generation according to the configured task-management mode. If the
+listener fails again, the higher completion-attempt generation is eligible for a new EHS entry.
+Discard closes the EHS entry and changes the referenced `event_publication` row to `COMPLETED`.
 
 The Error Handling Service dependency includes the UI. It is available under the configured
 `/error-handling` context path and labels the actions for this origin as retry publication and discard
@@ -431,7 +430,7 @@ publication.
 
 ### Module tests
 
-`./mvnw test -pl jme-spring-modulith-scs` runs, against a PostgreSQL started by Testcontainers:
+`./mvnw test -pl jme-spring-modulith-service` runs, against a PostgreSQL started by Testcontainers:
 
 * `ModularityTests` — verifies the module arrangement
 * `DocumentationTests` — generates the module documentation described above
@@ -440,9 +439,8 @@ publication.
   passing unnoticed.
 * `OrderApiSecurityTests` — drives the REST API through MockMvc with tokens built by
   `JeapAuthenticationTestTokenBuilder`
-* `AsyncEventFailureHooksIntegrationTests` — Spring Modulith's targeted retry and discard behavior
-* `AsyncEventFailureNotificationIntegrationTests` — failure notification behavior used by the starter's low-latency path
-* `AsyncEventPayloadIntegrationTests` — obtaining the failed event payload included in the EHS entry
+* `EventPublicationRecoveryConfigurationTests` — startup republication is disabled and all in-flight
+  states recover through staleness detection and the budget-aware starter
 
 ### Integration tests
 
@@ -452,8 +450,8 @@ the three services as Maven subprocesses, then exercises the running system:
 * `SpringModulithExampleIT` — the happy path from the Kafka event through to all three listeners, and
   the semantic role authorization
 * `ErrorHandlingIT` — the two Kafka consumption failures escalated to the error handling service
-* `InternalAsyncEventRetryIT` — the failing internal event, the starter's persistent retries and its
-  escalation after exhaustion
+* `InternalAsyncEventRetryIT` — the full failure lifecycle through automatic exhaustion, EHS fields
+  and payload, generation-safe retry and duplicate handling, discard and stable scheduler cycles
 
 The tests are named `*IT` and therefore run in the `verify` phase:
 
