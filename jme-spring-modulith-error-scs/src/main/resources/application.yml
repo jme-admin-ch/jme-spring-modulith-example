@@ -35,9 +35,10 @@ server:
 
 jeap:
   errorhandling:
-    # The topic failed message processing is reported on. jme-spring-modulith-service publishes to the
-    # same topic via jeap.messaging.kafka.errorTopicName.
+    # The topic failed Kafka message processing is reported on.
     topic: "jme-messageprocessing-failed"
+    # The separate topic used for failed Spring Modulith publications.
+    modulithPublicationProcessingFailedTopic: "jme-modulith-publication-processing-failed"
     deadLetterTopicName: "jme-messageprocessing-deadletter"
     # Configuration served to the bundled error handling UI.
     frontend:

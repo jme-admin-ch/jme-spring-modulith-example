@@ -28,6 +28,7 @@ its login and post-logout redirects, including the exact local logout target
 |-----------------------------------|----------------------------------------------------|--------------------------------------|--------------------------------|
 | `jme-order-created`               | `JmeOrderCreatedEvent`                             | the demo endpoint (stands in for an external system) | `messaging` module   |
 | `jme-messageprocessing-failed`    | `MessageProcessingFailedEvent`                     | the jEAP messaging error handler     | `jme-spring-modulith-error-scs` |
+| `jme-modulith-publication-processing-failed` | `ModulithPublicationProcessingFailedEvent` | the Modulith error handling starter | `jme-spring-modulith-error-scs` |
 | `jme-messageprocessing-deadletter`| `MessageProcessingFailedEvent`                     | the error handling service           | nobody (monitored)             |
 
 `JmeOrderCreatedEvent` comes from the
@@ -71,7 +72,7 @@ failed JDBC v2 publications.
 | `jeap.modulith.error-handling.reconciliation-lock-at-least` | `5s` (starter default)        | Minimum ShedLock duration for a reconciliation sweep                                       |
 | `jeap.modulith.error-handling.reconciliation-lock-at-most` | `30m` (starter default)         | Maximum ShedLock duration for a reconciliation sweep                                       |
 | `jeap.modulith.error-handling.reconciliation-min-age`  | `2s`                               | Minimum age before escalation                                                              |
-| `jeap.modulith.error-handling.failure-event-topic`     | `jme-messageprocessing-failed`     | Topic carrying `ModulithPublicationProcessingFailedEvent`                                  |
+| `jeap.modulith.error-handling.failure-event-topic`     | `jme-modulith-publication-processing-failed` | Topic carrying `ModulithPublicationProcessingFailedEvent`                         |
 | `jeap.modulith.error-handling.retry-command-topic`     | `jme-retry-modulith-publication`   | Topic carrying `RetryModulithPublicationCommand`                                           |
 | `jeap.modulith.error-handling.discard-command-topic`   | `jme-discard-modulith-publication` | Topic carrying `DiscardModulithPublicationCommand`                                         |
 
@@ -89,6 +90,7 @@ or discard command on the consumed Kafka cluster when an operator acts on it.
 | Property                                                              | Value                              | Meaning                                                        |
 |-----------------------------------------------------------------------|------------------------------------|------------------------------------------------------------------|
 | `jeap.errorhandling.topic`                                            | `jme-messageprocessing-failed`     | Where it looks for failures                                      |
+| `jeap.errorhandling.modulithPublicationProcessingFailedTopic`         | `jme-modulith-publication-processing-failed` | Where it looks for failed Modulith publications                  |
 | `jeap.errorhandling.deadLetterTopicName`                              | `jme-messageprocessing-deadletter` | Where its own unprocessable messages go                          |
 | `jeap.errorhandling.resend.default-resending-strategy.max-retries`    | `3`                                | Resends of a temporary failure before it becomes permanent       |
 | `jeap.errorhandling.resend.default-resending-strategy.delay`          | `10s`                              | Between resends                                                  |

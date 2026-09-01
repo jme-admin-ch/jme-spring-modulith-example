@@ -154,7 +154,9 @@ application. The `jeap-spring-modulith-error-handling-starter` supplies both usi
 Each resubmission increments `completion_attempts`. At the configured limit the publication remains
 `FAILED`, so an operator can still target it, and the starter publishes a
 `ModulithPublicationProcessingFailedEvent` through the transactional outbox. The values above are
-deliberately impatient so the behaviour is observable while trying out the example.
+deliberately impatient so the behaviour is observable while trying out the example. The failure event uses
+`jme-modulith-publication-processing-failed`, separate from the `jme-messageprocessing-failed` topic used for
+Kafka consumer failures.
 
 ### Escalating exhausted retries to the error handling service
 

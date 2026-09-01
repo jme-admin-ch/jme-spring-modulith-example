@@ -46,13 +46,13 @@ jeap:
       max-completion-attempts: 3
       reconciliation-interval: 5s
       reconciliation-min-age: 2s
-      failure-event-topic: jme-messageprocessing-failed
+      failure-event-topic: jme-modulith-publication-processing-failed
       retry-command-topic: jme-retry-modulith-publication
       discard-command-topic: jme-discard-modulith-publication
   messaging:
     kafka:
-      # Failed message processing is reported on this topic, which jme-spring-modulith-error-scs
-      # consumes. This single property is the whole wiring between a consumer and error handling.
+      # Failed Kafka message processing is reported on this topic. Failed Modulith publications use
+      # the separate topic configured above so each topic carries exactly one message type.
       errorTopicName: jme-messageprocessing-failed
       systemName: JME
       serviceName: ${spring.application.name}

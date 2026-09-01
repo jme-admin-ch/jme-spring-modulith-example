@@ -38,7 +38,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         topic = "jme-discard-modulith-publication")
 @JeapMessageProducerContract(JmeOrderCreatedEvent.TypeRef.class)
 @JeapMessageProducerContract(value = ModulithPublicationProcessingFailedEvent.TypeRef.class,
-        topic = "jme-messageprocessing-failed")
+        topic = "jme-modulith-publication-processing-failed")
 public class Application {
 
     public static void main(String[] args) {

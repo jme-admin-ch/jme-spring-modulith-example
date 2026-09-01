@@ -34,7 +34,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-service",
                 JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-error-scs",
-                "jme-messageprocessing-failed");
+                "jme-modulith-publication-processing-failed");
         KafkaConsumerGroupAwaiter.waitForAssignment(
                 "JME-jme-spring-modulith-service-jeap-modulith-publication-retry",
                 "jme-retry-modulith-publication");

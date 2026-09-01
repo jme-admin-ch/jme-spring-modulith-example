@@ -141,7 +141,7 @@ default-cluster fallback. In this example the topics are:
 
 | Direction | Topic |
 |---|---|
-| Failure event to EHS | `jme-messageprocessing-failed` |
+| Failure event to EHS | `jme-modulith-publication-processing-failed` |
 | Retry command to application | `jme-retry-modulith-publication` |
 | Discard command to application | `jme-discard-modulith-publication` |
 

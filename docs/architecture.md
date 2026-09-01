@@ -151,7 +151,8 @@ flowchart TB
     F --> STARTER["jEAP Spring Modulith<br/>error handling starter"]
     STARTER -->|" retries left "| REG
     STARTER -->|" retries exhausted "| OUTBOX["transactional outbox"]
-    OUTBOX -->|" ModulithPublicationProcessingFailedEvent "| ET
+    OUTBOX -->|" ModulithPublicationProcessingFailedEvent "| MET[/"jme-modulith-publication-processing-failed"/]
+    MET --> EHS
     EHS -->|" Retry / Discard command "| STARTER
 ```
 
@@ -190,6 +191,7 @@ sequenceDiagram
     participant SHI as shipping
     participant ST as Modulith error handling starter
     participant OB as transactional outbox
+    participant FT as Modulith publication failure topic
     participant EHS as Error Handling Service
 
     REG->>SHI: on(OrderCompleted) — attempt 1
@@ -204,7 +206,8 @@ sequenceDiagram
 
     ST->>REG: reconcile exhausted generation
     ST->>OB: persist ModulithPublicationProcessingFailedEvent
-    OB->>EHS: publish failure event
+    OB->>FT: publish failure event
+    FT->>EHS: consume failure event
     EHS->>EHS: persist origin MODULITH_PUBLICATION
     alt operator retries
         EHS->>ST: RetryModulithPublicationCommand(publicationId)

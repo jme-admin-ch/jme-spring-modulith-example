@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 @JeapMessageConsumerContract(value = ModulithPublicationProcessingFailedEvent.TypeRef.class,
-        topic = "jme-messageprocessing-failed")
+        topic = "jme-modulith-publication-processing-failed")
 @JeapMessageProducerContract(value = RetryModulithPublicationCommand.TypeRef.class,
         topic = "jme-retry-modulith-publication")
 @JeapMessageProducerContract(value = DiscardModulithPublicationCommand.TypeRef.class,

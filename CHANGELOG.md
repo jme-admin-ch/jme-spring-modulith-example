@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the Spring Modulith application module and service identity to `jme-spring-modulith-service`.
 - Completed generation-safe retry and discard integration with the Error Handling Service, including
   budget-aware restart recovery and running-system coverage.
+- Routed failed Modulith publications through a dedicated Kafka topic.
 - Updated the local OAuth mock and bundled UI logout configuration.
 - Re-enabled Maven Central publishing and Sonar checks.
 
