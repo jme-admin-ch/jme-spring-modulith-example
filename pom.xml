@@ -52,7 +52,7 @@
     <properties>
         <jeap-oauth-mock-server.version>10.5.0</jeap-oauth-mock-server.version>
         <jeap-error-handling-service.version>22.6.0</jeap-error-handling-service.version>
-        <jeap-spring-modulith-error-handling-starter.version>1.0.0</jeap-spring-modulith-error-handling-starter.version>
+        <jeap-spring-modulith-error-handling-starter.version>1.2.1</jeap-spring-modulith-error-handling-starter.version>
         <jme-spring-boot-integration-test.version>5.12.0</jme-spring-boot-integration-test.version>
         <jme-order-created-event.version>1.0.0</jme-order-created-event.version>
         <modulith-publication-failure-event.version>1.0.0</modulith-publication-failure-event.version>

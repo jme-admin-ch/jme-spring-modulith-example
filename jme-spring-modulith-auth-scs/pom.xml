@@ -38,6 +38,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <classifier>exec</classifier>
                     <mainClass>${main-class}</mainClass>
                 </configuration>
             </plugin>

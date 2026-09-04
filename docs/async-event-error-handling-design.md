@@ -215,7 +215,7 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Immediate path and reconciliation race | The generation primary key lets only one publish transaction win |
 | Two application instances reconcile concurrently | ShedLock serializes scheduled sweeps; the database uniqueness constraint remains the final guard |
 | EHS Kafka cluster configuration changes while an error is open | Retry or discard fails and leaves the error open if the stored cluster no longer has an outbox |
-| Several services share a command topic | Unsupported for now: the transactional outbox cannot persist the `jeap_eh_target_service` header, so applications must use service-specific retry and discard topics |
+| Several services share a command topic | Each application uses its own consumer group and receives every command; the starter applies `jeap_eh_target_service` filtering and acknowledges commands targeting another service as no-ops |
 | A cluster is removed after a command was persisted | The outbox relay can fall back to the default producer cluster; operators must keep the original cluster configured until pending commands have been relayed |
 | Retry command is delivered twice | Only the first command can claim the failed publication |
 | Discard command is delivered twice | The second conditional update is a no-op |
@@ -234,5 +234,6 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Running EHS and OAuth mock | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs` |
 
 `InternalAsyncEventRetryIT` verifies the running JME, Kafka, PostgreSQL and EHS instances directly. It
-asserts the EHS projection and payload, one error per generation, one listener call for an EHS retry,
-a stale duplicated command as a no-op, and discard to `COMPLETED` without another listener call.
+asserts the EHS projection and payload, the persisted and immediately relayed transactional-outbox
+message for each failure generation, one listener call for an EHS retry, a stale duplicated command as
+a no-op, and discard to `COMPLETED` without another listener call.

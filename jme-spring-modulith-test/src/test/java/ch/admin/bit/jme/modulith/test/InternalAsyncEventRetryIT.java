@@ -11,6 +11,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -61,10 +62,12 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
         Publication exhausted = publicationFor(orderId);
         await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+            assertThat(publicationStatusFor(serviceToken, exhausted.id())).isEqualTo("FAILED");
             List<EhsError> errors = errorsFor(exhausted.id());
             assertThat(errors).hasSize(1);
             assertThat(errors.getFirst().state()).isEqualTo("PERMANENT");
             assertThat(failureGenerationCount(exhausted.id(), AUTOMATIC_RETRY_BUDGET)).isEqualTo(1);
+            assertFailureOutboxMessage(exhausted.id(), AUTOMATIC_RETRY_BUDGET);
         });
 
         EhsError firstGeneration = errorsFor(exhausted.id()).getFirst();
@@ -95,6 +98,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
             assertThat(retried.completionAttempts()).isEqualTo(AUTOMATIC_RETRY_BUDGET + 1);
             assertThat(errorsFor(exhausted.id())).hasSize(2);
             assertThat(failureGenerationCount(exhausted.id(), AUTOMATIC_RETRY_BUDGET + 1)).isEqualTo(1);
+            assertFailureOutboxMessage(exhausted.id(), AUTOMATIC_RETRY_BUDGET + 1);
             assertThat(errorState(firstGeneration.id()))
                     .as("the original EHS generation is closed after dispatching its retry command")
                     .isIn("PERMANENT_RETRIED", "RESOLVE_ON_MANUALTASK");
@@ -127,6 +131,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
             Publication discarded = publicationFor(orderId);
             assertThat(discarded.status()).isEqualTo("COMPLETED");
             assertThat(discarded.completionAttempts()).isEqualTo(AUTOMATIC_RETRY_BUDGET + 1);
+            assertThat(publicationStatusFor(serviceToken, exhausted.id())).isEqualTo("COMPLETED");
             assertThat(shippingAttemptsFor(serviceToken, orderId)).isEqualTo(AUTOMATIC_RETRY_BUDGET + 1);
         });
 
@@ -176,6 +181,12 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
                 .then().statusCode(200)
                 .extract().jsonPath().getObject("'%s'".formatted(orderId), Integer.class);
         return attempts == null ? 0 : attempts;
+    }
+
+    private String publicationStatusFor(String token, UUID publicationId) {
+        return get(token, "/api/shipments/publications/" + publicationId)
+                .then().statusCode(200)
+                .extract().jsonPath().getString("status");
     }
 
     private Publication publicationFor(String orderId) {
@@ -239,6 +250,48 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
     private int totalFailureGenerationCount(UUID publicationId) {
         return queryInt(MODULITH_DB, "modulith",
                 "SELECT count(*) FROM modulith_publication_failure WHERE publication_id = ?", publicationId);
+    }
+
+    private void assertFailureOutboxMessage(UUID publicationId, int completionAttempts) {
+        FailureOutboxMessage message = failureOutboxMessage(publicationId, completionAttempts);
+        assertThat(message).isNotNull();
+        assertThat(message.topic()).isEqualTo("jme-modulith-publication-processing-failed");
+        assertThat(message.messageId()).isEqualTo(message.errorEventId());
+        assertThat(message.messageIdempotenceId()).isEqualTo(publicationId + ":" + completionAttempts);
+        assertThat(message.messageTypeName()).isEqualTo("ModulithPublicationProcessingFailedEvent");
+        assertThat(message.sendImmediately()).isTrue();
+        assertThat(message.sentImmediately()).isNotNull();
+    }
+
+    private FailureOutboxMessage failureOutboxMessage(UUID publicationId, int completionAttempts) {
+        String sql = """
+                SELECT outbox.topic, outbox.message_id, outbox.message_idempotence_id,
+                       outbox.message_type_name, outbox.send_immediately, outbox.sent_immediately,
+                       failure.error_event_id
+                  FROM deferred_message outbox
+                  JOIN modulith_publication_failure failure
+                    ON failure.error_event_id = outbox.message_id
+                 WHERE failure.publication_id = ? AND failure.completion_attempts = ?
+                """;
+        try (Connection connection = modulithConnection();
+             PreparedStatement statement = prepare(connection, sql, publicationId, completionAttempts);
+             ResultSet result = statement.executeQuery()) {
+            if (!result.next()) {
+                return null;
+            }
+            FailureOutboxMessage message = new FailureOutboxMessage(
+                    result.getString("topic"),
+                    result.getString("message_id"),
+                    result.getString("message_idempotence_id"),
+                    result.getString("message_type_name"),
+                    result.getObject("send_immediately", Boolean.class),
+                    result.getObject("sent_immediately", OffsetDateTime.class),
+                    result.getString("error_event_id"));
+            assertThat(result.next()).as("one outbox message per failure generation").isFalse();
+            return message;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot read the failure outbox message", exception);
+        }
     }
 
     private long retryOutboxId(UUID errorId) {
@@ -340,5 +393,10 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
     }
 
     private record EhsError(UUID id, String state) {
+    }
+
+    private record FailureOutboxMessage(String topic, String messageId, String messageIdempotenceId,
+                                        String messageTypeName, Boolean sendImmediately,
+                                        OffsetDateTime sentImmediately, String errorEventId) {
     }
 }

@@ -65,7 +65,7 @@ flowchart LR
 | `order`        | Owns the orders and publishes `OrderCompleted`. Depends on no other module.               | `/api/orders`                                    |
 | `inventory`    | Reserves stock for a completed order.                                                     | `/api/inventory`                                 |
 | `notification` | Records a notification for a completed order.                                             | `/api/notifications`                             |
-| `shipping`     | Hands the order over to the carrier — **and can fail doing so**.                          | `/api/shipments`, `/api/shipments/attempts`      |
+| `shipping`     | Hands the order over to the carrier — **and can fail doing so**.                          | `/api/shipments`, `/api/shipments/attempts`, `/api/shipments/publications/{id}` |
 | `messaging`    | Consumes `JmeOrderCreatedEvent` from Kafka and translates it into a call on `order`.      | `/api/demo/orders`                               |
 
 Two properties of this arrangement are worth calling out, because they are what Spring Modulith buys:

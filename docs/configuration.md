@@ -64,11 +64,13 @@ failed JDBC v2 publications.
 | Property                                               | Value                              | Meaning                                                                                   |
 |--------------------------------------------------------|------------------------------------|-------------------------------------------------------------------------------------------|
 | `jeap.modulith.error-handling.retry-interval`          | `5s`                               | How often retryable publications are selected                                             |
+| `jeap.modulith.error-handling.retry-initial-delay`     | `0s` (starter default)             | Delay before the first retry sweep                                                        |
 | `jeap.modulith.error-handling.retry-lock-at-least`     | `5s` (starter default)             | Minimum ShedLock duration for a retry sweep                                                |
 | `jeap.modulith.error-handling.retry-lock-at-most`      | `5m` (starter default)             | Maximum ShedLock duration for a retry sweep                                                |
 | `jeap.modulith.error-handling.retry-min-age`           | `2s`                               | Minimum age of a failed publication before retry                                           |
 | `jeap.modulith.error-handling.max-completion-attempts` | `3`                                | Total listener invocations, including the initial one                                      |
 | `jeap.modulith.error-handling.reconciliation-interval` | `5s`                               | How often exhausted publications are reconciled                                            |
+| `jeap.modulith.error-handling.reconciliation-initial-delay` | `0s` (starter default)        | Delay before the first reconciliation sweep                                               |
 | `jeap.modulith.error-handling.reconciliation-lock-at-least` | `5s` (starter default)        | Minimum ShedLock duration for a reconciliation sweep                                       |
 | `jeap.modulith.error-handling.reconciliation-lock-at-most` | `30m` (starter default)         | Maximum ShedLock duration for a reconciliation sweep                                       |
 | `jeap.modulith.error-handling.reconciliation-min-age`  | `2s`                               | Minimum age before escalation                                                              |
@@ -77,7 +79,8 @@ failed JDBC v2 publications.
 | `jeap.modulith.error-handling.discard-command-topic`   | `jme-discard-modulith-publication` | Topic carrying `DiscardModulithPublicationCommand`                                         |
 
 The values are deliberately impatient so the behaviour is observable while trying out the example. A
-real service would use longer intervals. `completion_attempts` keeps the retry budget across restarts.
+real service would use longer intervals. Module tests set both initial delays to one hour so scheduled
+sweeps cannot race tests that invoke the policy directly. `completion_attempts` keeps the retry budget across restarts.
 Once the budget is exhausted, the starter publishes a failure event through the transactional outbox
 and records `(publication_id, completion_attempts)` in `modulith_publication_failure`. The Error
 Handling Service stores the event with origin `MODULITH_PUBLICATION` and publishes a UUID-exact retry
@@ -112,14 +115,14 @@ jeap:
 `jeap.security.oauth2.resourceserver.system-name: jme` activates the semantic role model, in which a
 role reads `system_%tenant_@resource_#operation`. Each application module owns one resource.
 
-| Endpoint                                        | `@PreAuthorize`                   | Role                      |
-|-------------------------------------------------|-----------------------------------|---------------------------|
-| `GET /api/orders`, `GET /api/orders/{orderId}`  | `hasRole('order', 'read')`        | `jme_@order_#read`        |
-| `POST /api/orders`                              | `hasRole('order', 'write')`       | `jme_@order_#write`       |
-| `POST /api/demo/orders`                         | `hasRole('order', 'write')`       | `jme_@order_#write`       |
-| `GET /api/inventory`                            | `hasRole('inventory', 'read')`    | `jme_@inventory_#read`    |
-| `GET /api/notifications`                        | `hasRole('notification', 'read')` | `jme_@notification_#read` |
-| `GET /api/shipments`, `/api/shipments/attempts` | `hasRole('shipping', 'read')`     | `jme_@shipping_#read`     |
+| Endpoint                                                                             | `@PreAuthorize`                   | Role                      |
+|--------------------------------------------------------------------------------------|-----------------------------------|---------------------------|
+| `GET /api/orders`, `GET /api/orders/{orderId}`                                       | `hasRole('order', 'read')`        | `jme_@order_#read`        |
+| `POST /api/orders`                                                                   | `hasRole('order', 'write')`       | `jme_@order_#write`       |
+| `POST /api/demo/orders`                                                              | `hasRole('order', 'write')`       | `jme_@order_#write`       |
+| `GET /api/inventory`                                                                 | `hasRole('inventory', 'read')`    | `jme_@inventory_#read`    |
+| `GET /api/notifications`                                                             | `hasRole('notification', 'read')` | `jme_@notification_#read` |
+| `GET /api/shipments`, `/api/shipments/attempts`, `/api/shipments/publications/{id}`  | `hasRole('shipping', 'read')`     | `jme_@shipping_#read`     |
 
 The OAuth mock server issues tokens for four clients, all with the secret `secret` and the
 client-credentials grant:
