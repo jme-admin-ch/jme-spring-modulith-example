@@ -59,24 +59,20 @@ The staleness monitor and the starter's retry and reconciliation loops are sched
 ## Failed internal asynchronous events
 
 The `jeap-spring-modulith-error-handling-starter` owns the persistent retry and escalation policy for
-failed JDBC v2 publications.
+failed JDBC v2 publications. Its
+[configuration guide](https://github.com/jeap-admin-ch/jeap-spring-modulith-error-handling-starter/blob/main/docs/getting-started.md#configuration)
+documents all properties and their defaults. This example only overrides the following values:
 
-| Property                                               | Value                              | Meaning                                                                                   |
-|--------------------------------------------------------|------------------------------------|-------------------------------------------------------------------------------------------|
-| `jeap.modulith.error-handling.retry-interval`          | `5s`                               | How often retryable publications are selected                                             |
-| `jeap.modulith.error-handling.retry-initial-delay`     | `0s` (starter default)             | Delay before the first retry sweep                                                        |
-| `jeap.modulith.error-handling.retry-lock-at-least`     | `5s` (starter default)             | Minimum ShedLock duration for a retry sweep                                                |
-| `jeap.modulith.error-handling.retry-lock-at-most`      | `5m` (starter default)             | Maximum ShedLock duration for a retry sweep                                                |
-| `jeap.modulith.error-handling.retry-min-age`           | `2s`                               | Minimum age of a failed publication before retry                                           |
-| `jeap.modulith.error-handling.max-completion-attempts` | `3`                                | Total listener invocations, including the initial one                                      |
-| `jeap.modulith.error-handling.reconciliation-interval` | `5s`                               | How often exhausted publications are reconciled                                            |
-| `jeap.modulith.error-handling.reconciliation-initial-delay` | `0s` (starter default)        | Delay before the first reconciliation sweep                                               |
-| `jeap.modulith.error-handling.reconciliation-lock-at-least` | `5s` (starter default)        | Minimum ShedLock duration for a reconciliation sweep                                       |
-| `jeap.modulith.error-handling.reconciliation-lock-at-most` | `30m` (starter default)         | Maximum ShedLock duration for a reconciliation sweep                                       |
-| `jeap.modulith.error-handling.reconciliation-min-age`  | `2s`                               | Minimum age before escalation                                                              |
-| `jeap.modulith.error-handling.failure-event-topic`     | `jme-modulith-publication-processing-failed` | Topic carrying `ModulithPublicationProcessingFailedEvent`                         |
-| `jeap.modulith.error-handling.retry-command-topic`     | `jme-retry-modulith-publication`   | Topic carrying `RetryModulithPublicationCommand`                                           |
-| `jeap.modulith.error-handling.discard-command-topic`   | `jme-discard-modulith-publication` | Topic carrying `DiscardModulithPublicationCommand`                                         |
+| Property                                               | Value                                            |
+|--------------------------------------------------------|--------------------------------------------------|
+| `retry-interval`                                       | `5s`                                             |
+| `retry-min-age`                                        | `2s`                                             |
+| `max-completion-attempts`                              | `3`                                              |
+| `reconciliation-interval`                              | `5s`                                             |
+| `reconciliation-min-age`                               | `2s`                                             |
+| `failure-event-topic`                                  | `jme-modulith-publication-processing-failed`     |
+| `retry-command-topic`                                  | `jme-retry-modulith-publication`                 |
+| `discard-command-topic`                                | `jme-discard-modulith-publication`               |
 
 The values are deliberately impatient so the behaviour is observable while trying out the example. A
 real service would use longer intervals. Module tests set both initial delays to one hour so scheduled
