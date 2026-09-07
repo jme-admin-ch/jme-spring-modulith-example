@@ -2,3 +2,4 @@ application-local.yml
 application-ci.yml
 jme-spring-modulith-service/src/main/resources/application\.yml
 jme-spring-modulith-error-scs/src/main/resources/application\.yml
+InternalAsyncEventRetryIT\.java$
