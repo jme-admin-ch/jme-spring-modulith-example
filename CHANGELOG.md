@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   budget-aware restart recovery and running-system coverage.
 - Updated the Modulith error handling starter to `1.2.1` and verified that escalations are persisted
   and relayed through the transactional outbox.
+- Updated the jEAP Spring Boot parent to `40.10.0`, including the latest Tomcat security fixes.
 - Published thin application artifacts alongside `exec`-classified executable JARs so platform-specific
   RHOS and Nivel wrappers can reuse the applications and their migrations.
 - Routed failed Modulith publications through a dedicated Kafka topic.
