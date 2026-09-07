@@ -95,7 +95,7 @@ The transactional outbox makes the escalation marker and outbound event atomic. 
 cannot leave a marker without a corresponding message. The retry and reconciliation sweeps have separate ShedLock
 locks, using the application database and database time.
 
-## Message contracts
+## Infrastructure message types
 
 The failure event stays on `1.0.0`; generation-safe commands use `1.1.0`:
 
@@ -135,9 +135,10 @@ the database primary key.
 Both commands reference the publication UUID and the failure event identity that reported its exact
 completion-attempt generation. The discard command additionally carries the operator's reason when
 available. Missing, duplicate, or stale generation tokens are acknowledged as no-ops. The application
-declares producer and consumer contracts on its configured topics. The EHS persists the cluster on
-which it consumed the failure event and selects that cluster's outbox for the command, without a
-default-cluster fallback. In this example the topics are:
+only configures the three topics: jEAP Messaging, the starter and the EHS handle contract-validation
+exemptions for these framework-owned messages. Business messages still require application contracts.
+The EHS persists the cluster on which it consumed the failure event and selects that cluster's outbox
+for the command, without a default-cluster fallback. In this example the topics are:
 
 | Direction | Topic |
 |---|---|

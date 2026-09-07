@@ -79,19 +79,6 @@
             <groupId>ch.admin.bit.jeap.jme.messagetype.jme</groupId>
             <artifactId>jme-order-created-event</artifactId>
         </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>modulith-publication-processing-failed-event</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>retry-modulith-publication-command</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>discard-modulith-publication-command</artifactId>
-        </dependency>
-
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.modulith</groupId>

@@ -642,7 +642,7 @@ the publication to reach `FAILED` with four completion attempts and rerun the se
 
 | File | Responsibility |
 |---|---|
-| `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/Application.java` | Modulith bootstrap, scheduling and message contracts |
+| `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/Application.java` | Modulith bootstrap, scheduling and business message contracts |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/messaging/DemoOrderPublisherController.java` | Demo Kafka producer and trace-ID response |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/messaging/OrderCreatedKafkaConsumer.java` | Kafka adapter and deliberate Kafka failure paths |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/order/OrderManagement.java` | Idempotent order persistence and `OrderCompleted` publication |
@@ -650,7 +650,6 @@ the publication to reach `FAILED` with four completion attempts and rerun the se
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/notification/NotificationManagement.java` | Asynchronous notification listener |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/shipping/ShippingManagement.java` | Asynchronous shipping listener, deliberate failure and attempt counter |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/shipping/ShippingController.java` | Shipment, attempt and durable publication inspection APIs |
-| `jme-spring-modulith-error-scs/src/main/java/ch/admin/bit/jeap/errorhandling/ModulithMessagingContracts.java` | EHS failure-event and retry/discard command contracts |
 | `jme-spring-modulith-test/src/test/java/ch/admin/bit/jme/modulith/test/InternalAsyncEventRetryIT.java` | Complete automatic retry, EHS generation, retry and discard flow |
 
 ## Configuration tour
@@ -667,7 +666,7 @@ the publication to reach `FAILED` with four completion attempts and rerun the se
 | `jme-spring-modulith-scs/src/main/resources/db/migration/V2__application_modules.sql` | Order, inventory and notification tables |
 | `jme-spring-modulith-scs/src/main/resources/db/migration/V3__shipping.sql` | Shipping table |
 | `jme-spring-modulith-scs/src/main/resources/db/migration/V4__modulith_error_handling.sql` | Failure generations, transactional outbox and ShedLock |
-| `pom.xml` | Module list, versions, message contracts and starter dependencies |
+| `pom.xml` | Module list, business message and starter dependency versions |
 
 See [Architecture](architecture.md) for the module and runtime design, [Configuration](configuration.md)
 for the exact settings, and [Async event error handling](async-event-error-handling-design.md) for the

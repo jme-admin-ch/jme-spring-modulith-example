@@ -30,18 +30,6 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>modulith-publication-processing-failed-event</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>retry-modulith-publication-command</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.admin.bit.jeap.messagetype.jeap</groupId>
-            <artifactId>discard-modulith-publication-command</artifactId>
-        </dependency>
     </dependencies>
 
     <build>

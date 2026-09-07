@@ -36,10 +36,10 @@ flowchart TB
 The OAuth mock server is not there for decoration: the REST API of the Spring Modulith service *and*
 the REST API of the Error Handling Service are OAuth2 resource servers, and both need an issuer.
 
-`jme-spring-modulith-auth-scs` is only a pom plus `application*.yml`. The error-service wrapper also
-declares the three Modulith messaging contracts in one Java class. Both point
-`spring-boot-maven-plugin` at the main class of the jEAP artifact they wrap. That is the standard jEAP
-way of running an instance of a platform service.
+`jme-spring-modulith-auth-scs` and `jme-spring-modulith-error-scs` are only a pom plus
+`application*.yml`. Both point `spring-boot-maven-plugin` at the main class of the jEAP artifact they
+wrap. The Modulith failure event and commands are framework-owned messages, so the wrappers do not
+declare contracts for them. That is the standard jEAP way of running an instance of a platform service.
 
 ## The application modules
 
