@@ -1,6 +1,6 @@
 spring:
   application:
-    name: jme-spring-modulith-service
+    name: jme-spring-modulith-scs
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     driver-class-name: org.postgresql.Driver
@@ -36,7 +36,7 @@ spring:
 
 server:
   servlet:
-    context-path: /jme-spring-modulith-service
+    context-path: /jme-spring-modulith-scs
 
 jeap:
   modulith:

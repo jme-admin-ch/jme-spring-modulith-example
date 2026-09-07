@@ -227,7 +227,7 @@ EHS audit history. Deleting the publication row would lose more information and 
 | Piece | Where |
 |---|---|
 | Listener that fails on demand | `shipping` module, order type `FAIL_ASYNC` |
-| Retry, reconciliation and command configuration | `jme-spring-modulith-service/src/main/resources/application.yml` |
+| Retry, reconciliation and command configuration | `jme-spring-modulith-scs/src/main/resources/application.yml` |
 | Application-owned schema | `V4__modulith_error_handling.sql` |
 | Restart and staleness policy | `EventPublicationRecoveryConfigurationTests` |
 | Complete running-system failure lifecycle | `InternalAsyncEventRetryIT` |

@@ -22,7 +22,7 @@ class ErrorHandlingIT extends SpringModulithExampleITBase {
     @BeforeAll
     static void startServices() throws Exception {
         startAllServices();
-        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-service",
+        KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-scs",
                 JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-error-scs",
                 "jme-messageprocessing-failed");

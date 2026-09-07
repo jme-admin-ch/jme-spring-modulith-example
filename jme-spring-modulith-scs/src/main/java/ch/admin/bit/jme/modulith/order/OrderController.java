@@ -21,9 +21,8 @@ import java.util.List;
  * <p>
  * Access is authorized with jEAP <em>semantic</em> roles. A semantic role has the shape
  * {@code system_%tenant_@resource_#operation}; setting {@code jeap.security.oauth2.resourceserver.system-name}
- * to {@code jme} activates that role model. Every application module owns one semantic resource, so
- * the authorization boundaries of this service are exactly its module boundaries: reading orders needs
- * {@code jme_@order_#read}, creating them needs {@code jme_@order_#write}.
+ * to {@code jme} activates that role model. Domain-facing modules own semantic resources: reading
+ * orders needs {@code jme_@order_#read}, creating them needs {@code jme_@order_#write}.
  */
 @RestController
 @RequestMapping("/api/orders")
@@ -48,7 +47,7 @@ class OrderController {
 
     /**
      * Registers an order directly, without going through Kafka. The asynchronous fan-out to the
-     * {@code inventory} and {@code notification} modules is the same either way.
+     * {@code inventory}, {@code notification} and {@code shipping} modules is the same either way.
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

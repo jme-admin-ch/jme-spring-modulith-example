@@ -26,7 +26,7 @@ oauth-mock-data:
       audience: [ "jme-spring-modulith-error-scs" ]
 
     # Client used by the README examples and by the integration tests to call the REST API of
-    # jme-spring-modulith-service. It carries one semantic role per application module of the modulith.
+    # jme-spring-modulith-scs. It carries the roles needed by the domain-facing modules.
     - client-id: "jme-spring-modulith-client"
       client-secret: "{noop}secret"
       # SYS context = service-to-service call via the OAuth2 client credentials flow
@@ -37,9 +37,9 @@ oauth-mock-data:
         - "jme_@inventory_#read"
         - "jme_@notification_#read"
         - "jme_@shipping_#read"
-      # Audience the token is issued for. jme-spring-modulith-service validates that its own
+      # Audience the token is issued for. jme-spring-modulith-scs validates that its own
       # application name is contained in the audience of every incoming token.
-      audience: [ "jme-spring-modulith-service" ]
+      audience: [ "jme-spring-modulith-scs" ]
 
     # Same as above but without any of the roles above, to demonstrate that an authenticated caller
     # without the required semantic role is rejected with HTTP 403.
@@ -48,7 +48,7 @@ oauth-mock-data:
       context: "SYS"
       userroles:
         - "jme_@unrelated_#read"
-      audience: [ "jme-spring-modulith-service" ]
+      audience: [ "jme-spring-modulith-scs" ]
 
     # Client used by the integration tests and by the README examples to query the error handling
     # service. Its audience and roles are those of the error handling service, not of the modulith.

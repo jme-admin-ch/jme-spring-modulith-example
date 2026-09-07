@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Renamed the Spring Modulith application module and service identity to `jme-spring-modulith-service`.
 - Completed generation-safe retry and discard integration with the Error Handling Service, including
   budget-aware restart recovery and running-system coverage.
 - Updated the Modulith error handling starter to `1.2.1` and verified that escalations are persisted

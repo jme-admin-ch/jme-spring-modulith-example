@@ -16,7 +16,7 @@ service actually needs around it.
 
 The example consists of the following modules:
 
-* **jme-spring-modulith-service**: The Spring Modulith service, with the application modules `order`,
+* **jme-spring-modulith-scs**: The Spring Modulith service, with the application modules `order`,
   `inventory`, `notification`, `shipping` and `messaging`
 * **jme-spring-modulith-auth-scs**: An instance of the
   [jEAP OAuth mock server](https://github.com/jeap-admin-ch/jeap-oauth-mock-server) used as
@@ -31,6 +31,7 @@ This README is the entry point. Deeper documentation lives in `docs/`:
 
 | Page                                                                            | Content                                                                                                                |
 |---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| [Local walkthrough](docs/local-walkthrough.md)                                  | Build, start, exercise, inspect, test and reset the complete example with copyable commands                              |
 | [Architecture](docs/architecture.md)                                            | The application modules, how a message travels through the system, and the two failure paths                             |
 | [Configuration](docs/configuration.md)                                          | Every property, port, topic, role and client the example uses, and why                                                   |
 | [Async event error handling](docs/async-event-error-handling-design.md)         | Design and implemented flow for retrying and escalating failed internal asynchronous events                           |
@@ -80,8 +81,8 @@ At runtime, `/actuator/modulith` reports the module model of the running applica
 `DocumentationTests` generates the [Spring Modulith documentation](https://docs.spring.io/spring-modulith/reference/documentation.html)
 during the build, from the same module model the application runs on — so it cannot drift away from
 the code the way a hand-written architecture chapter does. After `./mvnw install` (or
-`./mvnw test -pl jme-spring-modulith-service`) it can be inspected in
-`jme-spring-modulith-service/target/spring-modulith-docs`:
+`./mvnw test -pl jme-spring-modulith-scs`) it can be inspected in
+`jme-spring-modulith-scs/target/spring-modulith-docs`:
 
 | File                    | Content                                                                                                                   |
 |-------------------------|---------------------------------------------------------------------------------------------------------------------------|
@@ -129,7 +130,7 @@ it would bypass the starter's retry policy. Instead, the staleness monitor marks
 budget used for ordinary listener failures. Because a publication can be replayed, the listeners are
 idempotent.
 
-The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-service/src/main/resources/db/migration/V1__event_publication.sql)
+The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-scs/src/main/resources/db/migration/V1__event_publication.sql)
 rather than by Spring Modulith itself, because it holds application state that outlives a restart and
 therefore deserves a migration history like any other table.
 
@@ -185,14 +186,14 @@ consumption fails synchronously is escalated to the error handling service by th
 right away and never reaches the event publication registry — see [Error handling](#error-handling)
 below.
 
-## Security: one semantic role per application module
+## Security: semantic roles for domain resources
 
 The REST API is an OAuth2 resource server via `jeap-spring-boot-security-starter`. Setting
 `jeap.security.oauth2.resourceserver.system-name: jme` activates the **semantic** role model, in which
 a role has the shape `system_%tenant_@resource_#operation` instead of being an opaque string.
 
-Every application module owns one semantic resource, so the authorization boundaries of the service
-are exactly its module boundaries:
+Every domain-facing module owns a semantic resource. The `messaging` adapter has no separate resource;
+its demo producer initiates order registration and therefore reuses `order/write`:
 
 | Endpoint                                    | `@PreAuthorize`                    | Required role              |
 |---------------------------------------------|------------------------------------|----------------------------|
@@ -209,18 +210,24 @@ grants nothing on the `inventory` one — `OrderApiSecurityTests` asserts both.
 ## Prerequisites
 
 1. **Java Development Kit (JDK)**: Version 25.
-2. **Docker**: For running the required infrastructure.
+2. **Docker with Docker Compose**: For running the required infrastructure.
+3. **Bash, curl and jq**: For running the walkthrough commands.
+4. **Registry access**: For the Maven artifacts and images under `repo.bit.admin.ch:8444`.
 
-**Note:** Use the provided maven wrapper to build and run the project.
+Ports `8090`, `8091`, `8092`, `9092`, `7781`, `5540` and `5541` must be free. Use the provided Maven
+wrapper to build and run the project.
 
 ## Getting started
 
+The complete copyable flow, including both failure paths, EHS retry/discard generations, SQL inspection,
+tests and troubleshooting, is in the [local walkthrough](docs/local-walkthrough.md).
+
 ### Infrastructure
 
-Starts a Kafka broker, a schema registry and one PostgreSQL per service:
+Starts a Kafka broker, a schema registry, one PostgreSQL for the application and one for EHS:
 
 ```shell
-docker compose -f docker/docker-compose.yml up
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 The broker and the schema registry use the ports the jEAP examples conventionally use (9092 and 7781),
@@ -229,29 +236,29 @@ so stop any other running jme example first.
 ### Build
 
 ```shell
-./mvnw install
+./mvnw install -pl '!:jme-spring-modulith-test'
 ```
 
 ### Start
 
-Each service is started with the `local` profile, in this order:
+Start each service with the `local` profile in a separate terminal, in this order:
 
 ```shell
 ./mvnw --projects jme-spring-modulith-auth-scs  spring-boot:run -Dspring-boot.run.profiles=local
 ./mvnw --projects jme-spring-modulith-error-scs spring-boot:run -Dspring-boot.run.profiles=local
-./mvnw --projects jme-spring-modulith-service   spring-boot:run -Dspring-boot.run.profiles=local
+./mvnw --projects jme-spring-modulith-scs        spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 | Service                         | URL                                              |
 |---------------------------------|--------------------------------------------------|
-| `jme-spring-modulith-service`   | http://localhost:8090/jme-spring-modulith-service |
+| `jme-spring-modulith-scs`        | http://localhost:8090/jme-spring-modulith-scs      |
 | `jme-spring-modulith-auth-scs`  | http://localhost:8091/jme-spring-modulith-auth-scs |
 | `jme-spring-modulith-error-scs` | http://localhost:8092/error-handling              |
 
 ## Trying it out
 
 Every call needs an access token. The OAuth mock server issues one for the client
-`jme-spring-modulith-client`, which carries one role per application module:
+`jme-spring-modulith-client`, which carries the roles needed by the exposed application resources:
 
 ```shell
 TOKEN=$(curl -s -X POST http://localhost:8091/jme-spring-modulith-auth-scs/oauth2/token \
@@ -267,18 +274,19 @@ deployment that event would come from another system; publishing it here keeps t
 with nothing but curl.
 
 ```shell
+ORDER_ID="standard-$(date +%s)"
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-1&orderType=STANDARD"
+  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=$ORDER_ID&orderType=STANDARD"
 ```
 
-The event is consumed by the `messaging` module, which registers the order in the `order` module,
-which publishes `OrderCompleted`, which the two other modules pick up asynchronously:
+The event is consumed by the `messaging` module, which registers the order in the `order` module.
+`order` publishes `OrderCompleted`, which three other modules pick up asynchronously:
 
 ```shell
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/orders
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/inventory
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/notifications
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-service/api/shipments
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/orders
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/inventory
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/notifications
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/jme-spring-modulith-scs/api/shipments
 ```
 
 The event publication registry shows one completed row per listener:
@@ -303,16 +311,17 @@ An order of type `FAIL_ASYNC` is consumed from Kafka without trouble and registe
 `shipping` listener of the resulting `OrderCompleted` event throws:
 
 ```shell
+ASYNC_ORDER_ID="async-$(date +%s)"
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-3&orderType=FAIL_ASYNC"
+  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=$ASYNC_ORDER_ID&orderType=FAIL_ASYNC"
 ```
 
 Watch the listener being retried, and stopping its automatic retries after the third attempt:
 
 ```shell
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8090/jme-spring-modulith-service/api/shipments/attempts
-# {"demo-3":1} … {"demo-3":2} … {"demo-3":3}  and then no further
+  http://localhost:8090/jme-spring-modulith-scs/api/shipments/attempts
+# The value for $ASYNC_ORDER_ID reaches 3 and then stops increasing.
 ```
 
 The other two listeners of the same event were not affected, and the registry shows exactly that —
@@ -324,6 +333,8 @@ docker compose -f docker/docker-compose.yml exec jme-spring-modulith-db-local \
    -c "select listener_id, status, completion_attempts from event_publication;"
 ```
 
+The attempts endpoint is an in-memory visualization aid and resets when the application restarts.
+
 After the retry budget is exhausted, the Error Handling Service exposes a permanent error with origin
 `MODULITH_PUBLICATION`. Retrying it invokes the listener once more through
 `RetryModulithPublicationCommand`; deleting it sends `DiscardModulithPublicationCommand` and completes
@@ -333,7 +344,7 @@ or open its bundled UI at `http://localhost:8092/error-handling`.
 ### The module model at runtime
 
 ```shell
-curl -u actuator:secret http://localhost:8090/jme-spring-modulith-service/actuator/modulith
+curl -u actuator:secret http://localhost:8090/jme-spring-modulith-scs/actuator/modulith
 ```
 
 The endpoint is part of `spring-modulith-starter-insight`. The actuator security chain of
@@ -349,14 +360,14 @@ semantic role is rejected by method security:
 
 ```shell
 # 401 — no token
-curl -i http://localhost:8090/jme-spring-modulith-service/api/orders
+curl -i http://localhost:8090/jme-spring-modulith-scs/api/orders
 
 # 403 — authenticated, but the token carries no jme_@order_#read role
 NO_ROLES=$(curl -s -X POST http://localhost:8091/jme-spring-modulith-auth-scs/oauth2/token \
   -d grant_type=client_credentials \
   -d client_id=jme-spring-modulith-client-without-roles \
   -d client_secret=secret | jq -r .access_token)
-curl -i -H "Authorization: Bearer $NO_ROLES" http://localhost:8090/jme-spring-modulith-service/api/orders
+curl -i -H "Authorization: Bearer $NO_ROLES" http://localhost:8090/jme-spring-modulith-scs/api/orders
 ```
 
 ## Error handling
@@ -387,7 +398,7 @@ trace id that ties the call, the consumption and the resulting error entry toget
 
 ```shell
 TRACE=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8090/jme-spring-modulith-service/api/demo/orders?orderId=demo-2&orderType=FAIL_PERMANENT" \
+  "http://localhost:8090/jme-spring-modulith-scs/api/demo/orders?orderId=demo-2&orderType=FAIL_PERMANENT" \
   | jq -r .traceId)
 
 # The error handling service has its own audience and roles, so it needs its own token
@@ -406,9 +417,15 @@ error handling service keeps resending the message every 10 seconds until the re
 
 ### Internal event publication failures
 
-For `FAIL_ASYNC`, query the EHS list for an entry whose `origin` is `MODULITH_PUBLICATION`. Its details
-include `publicationId`, `publicationListener`, `publicationEventType` and the JSON payload. The same
-existing EHS actions drive the Modulith-specific command path:
+For `FAIL_ASYNC`, first obtain the UUID from `event_publication`. In the EHS overview, select the entry
+whose `origin` is `MODULITH_PUBLICATION` and whose `eventId` equals that UUID. The separate
+`publicationId`, `publicationListener`, `publicationEventType` and JSON payload are available from the
+details and payload endpoints. Do not filter the overview by `publicationId` or by the transport event
+name `ModulithPublicationProcessingFailedEvent`.
+
+The [local walkthrough](docs/local-walkthrough.md#9-exercise-an-internal-asynchronous-failure) contains
+copyable polling commands that derive `PUBLICATION_ID`, `ERROR_ID` and the second EHS generation. Once
+those variables are set, the existing EHS actions drive the Modulith-specific command path:
 
 ```shell
 # Retry exactly the failed publication
@@ -432,7 +449,7 @@ publication.
 
 ### Module tests
 
-`./mvnw test -pl jme-spring-modulith-service` runs, against a PostgreSQL started by Testcontainers:
+`./mvnw test -pl jme-spring-modulith-scs` runs, against a PostgreSQL started by Testcontainers:
 
 * `ModularityTests` — verifies the module arrangement
 * `DocumentationTests` — generates the module documentation described above

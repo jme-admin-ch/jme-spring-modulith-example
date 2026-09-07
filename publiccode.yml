@@ -25,9 +25,9 @@ description:
       integrated through internal asynchronous events backed by the JDBC event publication registry,
       an external event is consumed from Kafka with jEAP messaging, failed message processing is
       handed over to the jEAP Error Handling Service, and the REST API is protected by the jEAP
-      security starter using semantic roles — one semantic resource per application module.
+      security starter using semantic roles for the domain-facing modules.
       It contains the following modules:
-      * jme-spring-modulith-service: The Spring Modulith example service with its five application
+      * jme-spring-modulith-scs: The Spring Modulith example service with its five application
         modules order, inventory, notification, shipping and messaging
       * jme-spring-modulith-auth-scs: An instance of the jEAP OAuth mock server used as
         authorization server
@@ -38,7 +38,7 @@ description:
       - Demonstrates the JDBC event publication registry and its at-least-once delivery guarantee
       - Demonstrates the retry of an internal asynchronous event whose processing fails, and what happens when the retries are exhausted
       - Demonstrates consuming an external Kafka event and reporting failures to the jEAP Error Handling Service
-      - Demonstrates authorization with jEAP semantic roles, one semantic resource per application module
+      - Demonstrates authorization with jEAP semantic roles for domain-facing application modules
       - Verifies the module boundaries at build time and generates module documentation
       - Local Docker Compose setup with Kafka, a schema registry and PostgreSQL
 legal:

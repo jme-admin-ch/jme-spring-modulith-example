@@ -10,7 +10,7 @@ one jme example can run at a time. The services themselves use a range of their 
 
 | Port   | What                                                       |
 |--------|------------------------------------------------------------|
-| `8090` | `jme-spring-modulith-service`, context path `/jme-spring-modulith-service` |
+| `8090` | `jme-spring-modulith-scs`, context path `/jme-spring-modulith-scs` |
 | `8091` | `jme-spring-modulith-auth-scs`, context path `/jme-spring-modulith-auth-scs` |
 | `8092` | `jme-spring-modulith-error-scs`, context path `/error-handling` |
 | `9092` | Kafka broker (SASL_PLAINTEXT, SCRAM-SHA-512, `user`/`user-secret`) |
@@ -29,6 +29,8 @@ its login and post-logout redirects, including the exact local logout target
 | `jme-order-created`               | `JmeOrderCreatedEvent`                             | the demo endpoint (stands in for an external system) | `messaging` module   |
 | `jme-messageprocessing-failed`    | `MessageProcessingFailedEvent`                     | the jEAP messaging error handler     | `jme-spring-modulith-error-scs` |
 | `jme-modulith-publication-processing-failed` | `ModulithPublicationProcessingFailedEvent` | the Modulith error handling starter | `jme-spring-modulith-error-scs` |
+| `jme-retry-modulith-publication` | `RetryModulithPublicationCommand` | `jme-spring-modulith-error-scs` | the Modulith error handling starter |
+| `jme-discard-modulith-publication` | `DiscardModulithPublicationCommand` | `jme-spring-modulith-error-scs` | the Modulith error handling starter |
 | `jme-messageprocessing-deadletter`| `MessageProcessingFailedEvent`                     | the error handling service           | nobody (monitored)             |
 
 `JmeOrderCreatedEvent` comes from the
@@ -38,7 +40,7 @@ constant on the generated `TypeRef`, so it is never spelled out in the code.
 
 ## Spring Modulith
 
-`jme-spring-modulith-service/src/main/resources/application.yml`:
+`jme-spring-modulith-scs/src/main/resources/application.yml`:
 
 | Property                                                        | Value    | Why                                                                                                     |
 |-----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------|
@@ -97,7 +99,7 @@ or discard command on the consumed Kafka cluster when an operator acts on it.
 | `jeap.errorhandling.frontend.*`                                       | set                                | Configuration served to the bundled UI, including the local logout redirect |
 
 On the consumer side the entire wiring to the error handling service is a single property in
-`jme-spring-modulith-service`:
+`jme-spring-modulith-scs`:
 
 ```yaml
 jeap:
@@ -109,7 +111,9 @@ jeap:
 ## Roles and clients
 
 `jeap.security.oauth2.resourceserver.system-name: jme` activates the semantic role model, in which a
-role reads `system_%tenant_@resource_#operation`. Each application module owns one resource.
+role reads `system_%tenant_@resource_#operation`. Each domain-facing module owns one resource. The
+`messaging` adapter reuses `order/write` for its demo producer because that endpoint initiates order
+registration.
 
 | Endpoint                                                                             | `@PreAuthorize`                   | Role                      |
 |--------------------------------------------------------------------------------------|-----------------------------------|---------------------------|
@@ -120,13 +124,14 @@ role reads `system_%tenant_@resource_#operation`. Each application module owns o
 | `GET /api/notifications`                                                             | `hasRole('notification', 'read')` | `jme_@notification_#read` |
 | `GET /api/shipments`, `/api/shipments/attempts`, `/api/shipments/publications/{id}`  | `hasRole('shipping', 'read')`     | `jme_@shipping_#read`     |
 
-The OAuth mock server issues tokens for four clients, all with the secret `secret` and the
-client-credentials grant:
+The OAuth mock server defines one browser client and four system clients. The system clients use the
+client-credentials grant with the secret `secret`:
 
 | Client                                    | Roles                                             | Audience                        | Used by                                    |
 |-------------------------------------------|---------------------------------------------------|---------------------------------|--------------------------------------------|
-| `jme-spring-modulith-client`              | one per application module                        | `jme-spring-modulith-service`   | the README walkthrough, the tests          |
-| `jme-spring-modulith-client-without-roles`| `jme_@unrelated_#read`                            | `jme-spring-modulith-service`   | demonstrating the 403 path                 |
+| `error-handling-ui`                       | EHS view, retry, delete and error-group roles      | `jme-spring-modulith-error-scs` | EHS UI authorization-code flow             |
+| `jme-spring-modulith-client`              | roles for order, inventory, notification and shipping resources | `jme-spring-modulith-scs` | the local walkthrough, the tests           |
+| `jme-spring-modulith-client-without-roles`| `jme_@unrelated_#read`                            | `jme-spring-modulith-scs`       | demonstrating the 403 path                 |
 | `jme-spring-modulith-error-client`        | `jme_@error_#view/#retry/#delete`, `jme_@errorgroup_#view/#edit` | `jme-spring-modulith-error-scs` | querying the error handling service        |
 | `jme-spring-modulith-error-service`       | the same error roles                              | `jme-spring-modulith-error-scs` | the error handling service's own outgoing calls |
 
@@ -172,11 +177,12 @@ The integration tests resolve `local` or `local,ci` through
 
 ## Testcontainers
 
-`jme-spring-modulith-service/src/test/resources/testcontainers.properties` sets `hub.image.name.prefix`, so
+`jme-spring-modulith-scs/src/test/resources/testcontainers.properties` sets `hub.image.name.prefix`, so
 the PostgreSQL image and the Ryuk sidecar Testcontainers starts itself are both pulled from the
 configured registry. Image names in the test code stay plain.
 
 ## Related
 
 - [Architecture](architecture.md)
+- [Local walkthrough](local-walkthrough.md)
 - [Async event error handling](async-event-error-handling-design.md)

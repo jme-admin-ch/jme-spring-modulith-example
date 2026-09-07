@@ -26,7 +26,8 @@ public class InventoryManagement {
      * another thread, only after the publishing transaction has committed, and in a transaction of its
      * own. Before the listener is invoked, Spring Modulith writes a row to {@code event_publication}
      * and marks it complete once the method returns normally — so a listener that fails, or a service
-     * that dies mid-flight, leaves an incomplete publication that is republished on the next startup.
+     * that dies mid-flight, leaves an incomplete publication for durable recovery and policy-controlled
+     * retry.
      * <p>
      * Because a publication can be replayed, the listener has to be idempotent.
      */

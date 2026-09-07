@@ -43,7 +43,7 @@
     </description>
 
     <modules>
-        <module>jme-spring-modulith-service</module>
+        <module>jme-spring-modulith-scs</module>
         <module>jme-spring-modulith-auth-scs</module>
         <module>jme-spring-modulith-error-scs</module>
         <module>jme-spring-modulith-test</module>
@@ -101,7 +101,7 @@
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>jme-spring-modulith-service</artifactId>
+                <artifactId>jme-spring-modulith-scs</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -11,7 +11,7 @@ Three runnable services and the infrastructure from `docker/docker-compose.yml`:
 ```mermaid
 flowchart TB
     subgraph services["Maven modules of this repository"]
-        SCS["jme-spring-modulith-service<br/>the Spring Modulith service<br/>:8090"]
+        SCS["jme-spring-modulith-scs<br/>the Spring Modulith service<br/>:8090"]
         AUTH["jme-spring-modulith-auth-scs<br/>jEAP OAuth mock server<br/>:8091"]
         EHS["jme-spring-modulith-error-scs<br/>jEAP Error Handling Service<br/>:8092"]
     end
@@ -36,9 +36,10 @@ flowchart TB
 The OAuth mock server is not there for decoration: the REST API of the Spring Modulith service *and*
 the REST API of the Error Handling Service are OAuth2 resource servers, and both need an issuer.
 
-`jme-spring-modulith-auth-scs` and `jme-spring-modulith-error-scs` contain **no Java code at all** —
-they are a pom plus `application*.yml`, pointing `spring-boot-maven-plugin` at the main class of the
-jEAP artifact they wrap. That is the standard jEAP way of running an instance of a platform service.
+`jme-spring-modulith-auth-scs` is only a pom plus `application*.yml`. The error-service wrapper also
+declares the three Modulith messaging contracts in one Java class. Both point
+`spring-boot-maven-plugin` at the main class of the jEAP artifact they wrap. That is the standard jEAP
+way of running an instance of a platform service.
 
 ## The application modules
 
@@ -241,7 +242,8 @@ EHS error. A discard marks the publication `COMPLETED` without invoking the list
 
 ## Persistence
 
-One PostgreSQL per service, schema owned by Flyway (`spring.jpa.hibernate.ddl-auto: validate`).
+One PostgreSQL for each stateful service, with schemas owned by Flyway
+(`spring.jpa.hibernate.ddl-auto: validate`). The OAuth mock server does not need a database.
 
 | Table                          | Owner                          | Migration                            |
 |--------------------------------|--------------------------------|--------------------------------------|
@@ -270,9 +272,9 @@ The REST API is an OAuth2 resource server via `jeap-spring-boot-security-starter
 roles** (`system_%tenant_@resource_#operation`), activated by setting
 `jeap.security.oauth2.resourceserver.system-name: jme`.
 
-Every application module owns one semantic resource, so the authorization boundaries of the service
-are exactly its module boundaries. See [Configuration](configuration.md#roles-and-clients) for the
-full table.
+Every domain-facing module owns one semantic resource. The `messaging` adapter has no separate
+resource; its demo producer reuses `order/write` because it initiates order registration. See
+[Configuration](configuration.md#roles-and-clients) for the full table.
 
 Two properties of this fall out of the model rather than being coded:
 
@@ -286,12 +288,12 @@ Two properties of this fall out of the model rather than being coded:
 
 | Test                            | Module                     | What it covers                                                                     |
 |---------------------------------|----------------------------|--------------------------------------------------------------------------------------|
-| `ModularityTests`               | `jme-spring-modulith-service` | The module arrangement — fails the build on an illegal dependency or a cycle          |
-| `DocumentationTests`            | `jme-spring-modulith-service` | Generates the module documentation and asserts the expected files are produced        |
-| `OrderIntegrationTests`         | `jme-spring-modulith-service` | `@ApplicationModuleTest` slice of `order`, including event publication and idempotence |
-| `InventoryIntegrationTests`     | `jme-spring-modulith-service` | `@ApplicationModuleTest` slice of `inventory`, driven by a published `OrderCompleted`  |
-| `OrderApiSecurityTests`         | `jme-spring-modulith-service` | Semantic role authorization through MockMvc                                            |
-| `EventPublicationRecoveryConfigurationTests` | `jme-spring-modulith-service` | Budget-aware restart and staleness recovery configuration                 |
+| `ModularityTests`               | `jme-spring-modulith-scs`     | The module arrangement — fails the build on an illegal dependency or a cycle          |
+| `DocumentationTests`            | `jme-spring-modulith-scs`     | Generates the module documentation and asserts the expected files are produced        |
+| `OrderIntegrationTests`         | `jme-spring-modulith-scs`     | `@ApplicationModuleTest` slice of `order`, including event publication and idempotence |
+| `InventoryIntegrationTests`     | `jme-spring-modulith-scs`     | `@ApplicationModuleTest` slice of `inventory`, driven by a published `OrderCompleted`  |
+| `OrderApiSecurityTests`         | `jme-spring-modulith-scs`     | Semantic role authorization through MockMvc                                            |
+| `EventPublicationRecoveryConfigurationTests` | `jme-spring-modulith-scs`     | Budget-aware restart and staleness recovery configuration                 |
 | `SpringModulithExampleIT`       | `jme-spring-modulith-test` | The happy path end to end, plus 401/403 against the running service                    |
 | `ErrorHandlingIT`               | `jme-spring-modulith-test` | Both Kafka consumption failures, asserted through the EHS query API                    |
 | `InternalAsyncEventRetryIT`     | `jme-spring-modulith-test` | Full automatic retry, EHS generation, duplicate, retry and discard flow                  |
@@ -304,5 +306,6 @@ subprocesses.
 ## Related
 
 - [Configuration](configuration.md)
+- [Local walkthrough](local-walkthrough.md)
 - [Async event error handling](async-event-error-handling-design.md)
 - [Root README](../README.md)

@@ -10,15 +10,15 @@ import static io.restassured.RestAssured.given;
 
 /**
  * Common setup for the integration tests: the URLs of the three services, the access tokens issued by
- * the OAuth mock server, and the calls against the REST API of jme-spring-modulith-service.
+ * the OAuth mock server, and the calls against the REST API of jme-spring-modulith-scs.
  */
 abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationTestBase {
 
     static final String AUTH_BASE_URL = "http://localhost:8091/jme-spring-modulith-auth-scs";
-    static final String SERVICE_BASE_URL = "http://localhost:8090/jme-spring-modulith-service";
+    static final String SERVICE_BASE_URL = "http://localhost:8090/jme-spring-modulith-scs";
     static final String ERROR_SCS_BASE_URL = "http://localhost:8092/error-handling";
 
-    /** Client carrying one semantic role per application module, see the auth-scs application-local.yml. */
+    /** Client carrying the roles needed by the domain-facing modules, see auth-scs application-local.yml. */
     static final String CLIENT_ID = "jme-spring-modulith-client";
     /** Client authenticated the same way but without any of the roles the REST API requires. */
     static final String CLIENT_ID_WITHOUT_ROLES = "jme-spring-modulith-client-without-roles";
@@ -29,7 +29,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
     static void startAllServices() throws Exception {
         startService("jme-spring-modulith-auth-scs", AUTH_BASE_URL);
         startService("jme-spring-modulith-error-scs", ERROR_SCS_BASE_URL);
-        startService("jme-spring-modulith-service", SERVICE_BASE_URL);
+        startService("jme-spring-modulith-scs", SERVICE_BASE_URL);
     }
 
     String accessToken() {
