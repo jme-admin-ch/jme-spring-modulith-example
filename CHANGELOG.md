@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Completed generation-safe retry and discard integration with the Error Handling Service, including
   budget-aware restart recovery and running-system coverage.
-- Updated the Modulith error handling starter to `1.3.1`, removed application-owned contracts for its
-  infrastructure messages, and verified that escalations are persisted and relayed through the transactional outbox.
-- Updated the jEAP Spring Boot parent to `40.10.0`, including the latest Tomcat security fixes.
+- Updated the Modulith error handling starter to `1.3.1` with explicit retry/discard consumer contracts and startup
+  checks, and verified that escalations use the transactional outbox without a failure-event producer contract.
+- Consolidated the complete application schema into `V1__initial_schema.sql`.
+- Let the running-system JDBC assertions follow the configured Hikari schema for isolated test runs.
+- Updated the jEAP Spring Boot parent to `40.10.1`, retaining the Tomcat security fixes and using its
+  managed Modulith error handling starter `1.3.1`, Messaging `18.10.1` and outbox `17.27.1` without redundant overrides.
 - Published thin application artifacts alongside `exec`-classified executable JARs so platform-specific
   RHOS and Nivel wrappers can reuse the applications and their migrations.
 - Routed failed Modulith publications through a dedicated Kafka topic.

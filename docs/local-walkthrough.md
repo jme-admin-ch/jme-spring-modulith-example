@@ -642,7 +642,7 @@ the publication to reach `FAILED` with four completion attempts and rerun the se
 
 | File | Responsibility |
 |---|---|
-| `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/Application.java` | Modulith bootstrap, scheduling and business message contracts |
+| `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/Application.java` | Modulith bootstrap, scheduling, business message contracts and retry/discard consumer contracts |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/messaging/DemoOrderPublisherController.java` | Demo Kafka producer and trace-ID response |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/messaging/OrderCreatedKafkaConsumer.java` | Kafka adapter and deliberate Kafka failure paths |
 | `jme-spring-modulith-scs/src/main/java/ch/admin/bit/jme/modulith/order/OrderManagement.java` | Idempotent order persistence and `OrderCompleted` publication |
@@ -662,10 +662,7 @@ the publication to reach `FAILED` with four completion attempts and rerun the se
 | `jme-spring-modulith-error-scs/src/main/resources/application.yml` | EHS topics, database and OAuth client |
 | `jme-spring-modulith-error-scs/src/main/resources/application-local.yml` | Local EHS retry strategy and frontend |
 | `docker/docker-compose.yml` | Kafka, Schema Registry and both PostgreSQL databases |
-| `jme-spring-modulith-scs/src/main/resources/db/migration/V1__event_publication.sql` | Spring Modulith JDBC v2 registry |
-| `jme-spring-modulith-scs/src/main/resources/db/migration/V2__application_modules.sql` | Order, inventory and notification tables |
-| `jme-spring-modulith-scs/src/main/resources/db/migration/V3__shipping.sql` | Shipping table |
-| `jme-spring-modulith-scs/src/main/resources/db/migration/V4__modulith_error_handling.sql` | Failure generations, transactional outbox and ShedLock |
+| `jme-spring-modulith-scs/src/main/resources/db/migration/V1__initial_schema.sql` | Complete schema: Spring Modulith JDBC v2 registry, application modules, failure generations, transactional outbox and ShedLock |
 | `pom.xml` | Module list, business message and starter dependency versions |
 
 See [Architecture](architecture.md) for the module and runtime design, [Configuration](configuration.md)

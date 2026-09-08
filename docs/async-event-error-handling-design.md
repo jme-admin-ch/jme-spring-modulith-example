@@ -135,8 +135,11 @@ the database primary key.
 Both commands reference the publication UUID and the failure event identity that reported its exact
 completion-attempt generation. The discard command additionally carries the operator's reason when
 available. Missing, duplicate, or stale generation tokens are acknowledged as no-ops. The application
-only configures the three topics: jEAP Messaging, the starter and the EHS handle contract-validation
-exemptions for these framework-owned messages. Business messages still require application contracts.
+declares consumer contracts for both commands on the configured topics. The enabled starter checks
+them at startup using the existing validator, and normal consumer checks remain active at runtime.
+Together with the two `JmeOrderCreatedEvent` business contracts, `Application` generates four contracts.
+The failure event needs no producer contract because jEAP Messaging exempts it. The EHS wrapper needs
+no contracts because the EHS deliberately uses its existing no-op `ErrorServiceContractValidator`.
 The EHS persists the cluster on which it consumed the failure event and selects that cluster's outbox
 for the command, without a default-cluster fallback. In this example the topics are:
 
@@ -229,7 +232,7 @@ EHS audit history. Deleting the publication row would lose more information and 
 |---|---|
 | Listener that fails on demand | `shipping` module, order type `FAIL_ASYNC` |
 | Retry, reconciliation and command configuration | `jme-spring-modulith-scs/src/main/resources/application.yml` |
-| Application-owned schema | `V4__modulith_error_handling.sql` |
+| Application-owned schema | `V1__initial_schema.sql` |
 | Restart and staleness policy | `EventPublicationRecoveryConfigurationTests` |
 | Complete running-system failure lifecycle | `InternalAsyncEventRetryIT` |
 | Running EHS and OAuth mock | `jme-spring-modulith-error-scs`, `jme-spring-modulith-auth-scs` |

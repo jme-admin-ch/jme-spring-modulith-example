@@ -44,7 +44,7 @@ constant on the generated `TypeRef`, so it is never spelled out in the code.
 
 | Property                                                        | Value    | Why                                                                                                     |
 |-----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------|
-| `spring.modulith.events.jdbc.schema-initialization.enabled`     | `false`  | The `event_publication` table is owned by Flyway (`V1__event_publication.sql`), like every other table    |
+| `spring.modulith.events.jdbc.schema-initialization.enabled`     | `false`  | The `event_publication` table is owned by Flyway (`V1__initial_schema.sql`), like every other table    |
 | `spring.modulith.events.completion-mode`                        | `update` | Keep publications after completion instead of deleting or archiving them, so failures stay inspectable    |
 | `spring.modulith.events.republish-outstanding-events-on-restart`| `false`  | Prevent startup from replaying incomplete publications outside the starter's retry budget                 |
 | `spring.modulith.events.staleness.check-intervall`              | `30s`    | How often to look for publications that got stuck                                                         |

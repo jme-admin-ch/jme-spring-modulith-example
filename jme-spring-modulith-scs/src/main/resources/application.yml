@@ -16,7 +16,7 @@ spring:
   modulith:
     events:
       jdbc:
-        # The event_publication table is created by V1__event_publication.sql
+        # The event_publication table is created by V1__initial_schema.sql
         schema-initialization:
           enabled: false
       # Recovery must go through staleness detection and the starter so the durable retry budget is

@@ -25,9 +25,9 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
     private static final int AUTOMATIC_RETRY_BUDGET = 3;
     private static final String MODULITH_DB = databaseUrl(
-            "jme-spring-modulith-db-local", 5540, "jme-spring-modulith-db-local");
+            "jme-spring-modulith-db-local", 5540, "jme-spring-modulith-db-local", "public");
     private static final String ERROR_DB = databaseUrl(
-            "jeap-error-handling-service-db-local", 5541, "jeap-error-handling-service-db-local");
+            "jeap-error-handling-service-db-local", 5541, "jeap-error-handling-service-db-local", "data");
 
     @BeforeAll
     static void startServices() throws Exception {
@@ -215,8 +215,8 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
     private List<EhsError> errorsFor(UUID publicationId) {
         String sql = """
                 SELECT error.id, error.state
-                  FROM data.error error
-                  JOIN data.causing_event causing_event ON causing_event.id = error.causing_event_id
+                  FROM error error
+                  JOIN causing_event causing_event ON causing_event.id = error.causing_event_id
                  WHERE causing_event.origin = 'MODULITH_PUBLICATION'
                    AND causing_event.modulith_publication_id = ?
                  ORDER BY error.created
@@ -237,7 +237,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
     }
 
     private String errorState(UUID errorId) {
-        return queryString(ERROR_DB, "errorhandling", "SELECT state FROM data.error WHERE id = ?", errorId);
+        return queryString(ERROR_DB, "errorhandling", "SELECT state FROM error WHERE id = ?", errorId);
     }
 
     private int failureGenerationCount(UUID publicationId, int completionAttempts) {
@@ -296,7 +296,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
     private long retryOutboxId(UUID errorId) {
         String sql = """
-                SELECT id FROM data.deferred_message
+                SELECT id FROM deferred_message
                  WHERE message_type_name = 'RetryModulithPublicationCommand'
                    AND message_idempotence_id = ?
                  ORDER BY id DESC LIMIT 1
@@ -306,7 +306,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
     private void duplicateOutboxMessage(long id) {
         String sql = """
-                UPDATE data.deferred_message
+                UPDATE deferred_message
                    SET sent_immediately = NULL, sent_scheduled = NULL, send_immediately = FALSE,
                        schedule_after = NULL, failed = NULL, resend = FALSE
                  WHERE id = ?
@@ -316,7 +316,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
 
     private boolean wasRelayedByScheduler(long id) {
         return queryInt(ERROR_DB, "errorhandling", """
-                SELECT count(*) FROM data.deferred_message
+                SELECT count(*) FROM deferred_message
                  WHERE id = ? AND sent_scheduled IS NOT NULL
                 """, id) == 1;
     }
@@ -384,9 +384,11 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
         return DriverManager.getConnection(ERROR_DB, "errorhandling", "secret");
     }
 
-    private static String databaseUrl(String ciHost, int localPort, String database) {
+    private static String databaseUrl(String ciHost, int localPort, String database, String defaultSchema) {
         String host = System.getenv("CI") == null ? "localhost:" + localPort : ciHost + ":5432";
-        return "jdbc:postgresql://%s/%s".formatted(host, database);
+        String schema = System.getenv("SPRING_DATASOURCE_HIKARI_SCHEMA");
+        return "jdbc:postgresql://%s/%s".formatted(host, database)
+                + "?currentSchema=" + (schema == null ? defaultSchema : schema);
     }
 
     private record Publication(UUID id, String status, int completionAttempts) {

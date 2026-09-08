@@ -130,7 +130,7 @@ it would bypass the starter's retry policy. Instead, the staleness monitor marks
 budget used for ordinary listener failures. Because a publication can be replayed, the listeners are
 idempotent.
 
-The registry table is created by [`V1__event_publication.sql`](jme-spring-modulith-scs/src/main/resources/db/migration/V1__event_publication.sql)
+The registry table is created by [`V1__initial_schema.sql`](jme-spring-modulith-scs/src/main/resources/db/migration/V1__initial_schema.sql)
 rather than by Spring Modulith itself, because it holds application state that outlives a restart and
 therefore deserves a migration history like any other table.
 
@@ -465,6 +465,12 @@ publication.
 
 `jme-spring-modulith-test` starts the infrastructure through Spring Boot's Docker Compose support and
 the three services as Maven subprocesses, then exercises the running system:
+
+For an isolated schema run, set `SPRING_DATASOURCE_HIKARI_SCHEMA` and `SPRING_FLYWAY_DEFAULT_SCHEMA` to the
+same dedicated test schema in both databases, and set `spring.jpa.properties.hibernate.default_schema`
+to that schema through `SPRING_APPLICATION_JSON`. The direct JDBC assertions use the Hikari schema
+as well. Local dependency-version overrides belong in `MAVEN_ARGS` so the service subprocesses use
+the same versions as the reactor.
 
 * `SpringModulithExampleIT` — the happy path from the Kafka event through to all three listeners, and
   the semantic role authorization

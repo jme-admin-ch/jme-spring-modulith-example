@@ -38,8 +38,11 @@ the REST API of the Error Handling Service are OAuth2 resource servers, and both
 
 `jme-spring-modulith-auth-scs` and `jme-spring-modulith-error-scs` are only a pom plus
 `application*.yml`. Both point `spring-boot-maven-plugin` at the main class of the jEAP artifact they
-wrap. The Modulith failure event and commands are framework-owned messages, so the wrappers do not
-declare contracts for them. That is the standard jEAP way of running an instance of a platform service.
+wrap. The EHS uses its existing no-op `ErrorServiceContractValidator`, so its wrapper declares no
+contracts for the Modulith failure event or commands. The source microservice is different:
+`Application` declares retry/discard consumer contracts on the configured topics, in addition to its
+two business contracts. The enabled starter validates the command contracts at startup. Only the
+framework-owned failure event is exempt from producer validation in jEAP Messaging.
 
 ## The application modules
 
@@ -247,14 +250,14 @@ One PostgreSQL for each stateful service, with schemas owned by Flyway
 
 | Table                          | Owner                          | Migration                            |
 |--------------------------------|--------------------------------|--------------------------------------|
-| `event_publication`            | Spring Modulith                | `V1__event_publication.sql`          |
-| `orders`                       | `order` module                 | `V2__application_modules.sql`        |
-| `stock_reservation`            | `inventory` module             | `V2__application_modules.sql`        |
-| `notification`                 | `notification` module          | `V2__application_modules.sql`        |
-| `shipment`                     | `shipping` module              | `V3__shipping.sql`                   |
-| `modulith_publication_failure` | Modulith error handling starter | `V4__modulith_error_handling.sql`    |
-| `deferred_message`             | jEAP transactional outbox      | `V4__modulith_error_handling.sql`    |
-| `shedlock`                     | scheduled job coordination     | `V4__modulith_error_handling.sql`    |
+| `event_publication`            | Spring Modulith                | `V1__initial_schema.sql` |
+| `orders`                       | `order` module                 | `V1__initial_schema.sql` |
+| `stock_reservation`            | `inventory` module             | `V1__initial_schema.sql` |
+| `notification`                 | `notification` module          | `V1__initial_schema.sql` |
+| `shipment`                     | `shipping` module              | `V1__initial_schema.sql` |
+| `modulith_publication_failure` | Modulith error handling starter | `V1__initial_schema.sql` |
+| `deferred_message`             | jEAP transactional outbox      | `V1__initial_schema.sql` |
+| `shedlock`                     | scheduled job coordination     | `V1__initial_schema.sql` |
 
 The modules do not share tables: each owns its own data and the others reach it only through the
 module's API.
@@ -262,7 +265,7 @@ module's API.
 `event_publication` is created by a migration rather than by Spring Modulith's own schema
 initialization (`spring.modulith.events.jdbc.schema-initialization.enabled: false`), because it holds
 application state that outlives a restart and therefore deserves a migration history like any other
-table. The migration is a verbatim copy of Spring Modulith's
+table. The registry DDL in the initial migration is a verbatim copy of Spring Modulith's
 `schemas/v2/schema-postgresql.sql`; the v2 schema is the one that carries `status`,
 `completion_attempts` and `last_resubmission_date`, which the failure handling depends on.
 
