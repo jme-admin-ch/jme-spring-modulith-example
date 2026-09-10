@@ -97,7 +97,7 @@ sequenceDiagram
     autonumber
     participant Client
     participant MSG as messaging
-    participant Kafka as jme-order-created
+    participant Kafka as jme-order-created-modulith
     participant ORD as order
     participant REG as event_publication
     participant INV as inventory
@@ -142,7 +142,7 @@ confuse.
 
 ```mermaid
 flowchart TB
-    K[/"jme-order-created"/] --> C["messaging: @KafkaListener"]
+    K[/"jme-order-created-modulith"/] --> C["messaging: @KafkaListener"]
 
     C -->|" FAIL_TEMPORARY / FAIL_PERMANENT<br/>listener throws "| EH["jEAP messaging error handler"]
     EH --> ET[/"jme-messageprocessing-failed"/]

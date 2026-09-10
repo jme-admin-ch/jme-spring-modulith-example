@@ -269,7 +269,7 @@ TOKEN=$(curl -s -X POST http://localhost:8091/jme-spring-modulith-auth-scs/oauth
 
 ### The happy path
 
-`POST /api/demo/orders` publishes a `JmeOrderCreatedEvent` to the topic `jme-order-created`. In a real
+`POST /api/demo/orders` publishes a `JmeOrderCreatedEvent` to the topic `jme-order-created-modulith`. In a real
 deployment that event would come from another system; publishing it here keeps the example runnable
 with nothing but curl.
 

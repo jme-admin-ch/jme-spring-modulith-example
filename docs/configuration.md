@@ -26,7 +26,7 @@ its login and post-logout redirects, including the exact local logout target
 
 | Topic                             | Message                                            | Produced by                          | Consumed by                    |
 |-----------------------------------|----------------------------------------------------|--------------------------------------|--------------------------------|
-| `jme-order-created`               | `JmeOrderCreatedEvent`                             | the demo endpoint (stands in for an external system) | `messaging` module   |
+| `jme-order-created-modulith`      | `JmeOrderCreatedEvent`                             | the demo endpoint (stands in for an external system) | `messaging` module   |
 | `jme-messageprocessing-failed`    | `MessageProcessingFailedEvent`                     | the jEAP messaging error handler     | `jme-spring-modulith-error-scs` |
 | `jme-modulith-publication-processing-failed` | `ModulithPublicationProcessingFailedEvent` | the Modulith error handling starter | `jme-spring-modulith-error-scs` |
 | `jme-retry-modulith-publication` | `RetryModulithPublicationCommand` | `jme-spring-modulith-error-scs` | the Modulith error handling starter |
@@ -35,8 +35,11 @@ its login and post-logout redirects, including the exact local logout target
 
 `JmeOrderCreatedEvent` comes from the
 [jme message type registry](https://github.com/jme-admin-ch/jme-message-type-registry) as a released
-artifact (`ch.admin.bit.jeap.jme.messagetype.jme:jme-order-created-event`); its topic name is a
-constant on the generated `TypeRef`, so it is never spelled out in the code.
+artifact (`ch.admin.bit.jeap.jme.messagetype.jme:jme-order-created-event`). This example uses the
+dedicated topic `jme-order-created-modulith` rather than the message type's default topic, so its
+traffic is isolated from other examples. `MessagingTopics.ORDER_CREATED` is shared by the publisher,
+listener and producer/consumer contract declarations. Platform bindings must grant the application
+read/write access and the shared EHS write access for Kafka-message retries.
 
 ## Spring Modulith
 

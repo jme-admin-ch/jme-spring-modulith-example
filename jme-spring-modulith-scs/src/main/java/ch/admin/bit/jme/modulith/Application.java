@@ -5,6 +5,7 @@ import ch.admin.bit.jeap.messaging.annotations.JeapMessageProducerContract;
 import ch.admin.bit.jeap.modulith.command.discardpublication.DiscardModulithPublicationCommand;
 import ch.admin.bit.jeap.modulith.command.retrypublication.RetryModulithPublicationCommand;
 import ch.admin.bit.jme.messaging.event.order.created.JmeOrderCreatedEvent;
+import ch.admin.bit.jme.modulith.messaging.MessagingTopics;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
@@ -30,8 +31,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EntityScan
 @EnableJpaRepositories
-@JeapMessageConsumerContract(JmeOrderCreatedEvent.TypeRef.class)
-@JeapMessageProducerContract(JmeOrderCreatedEvent.TypeRef.class)
+@JeapMessageConsumerContract(value = JmeOrderCreatedEvent.TypeRef.class, topic = MessagingTopics.ORDER_CREATED)
+@JeapMessageProducerContract(value = JmeOrderCreatedEvent.TypeRef.class, topic = MessagingTopics.ORDER_CREATED)
 @JeapMessageConsumerContract(value = RetryModulithPublicationCommand.TypeRef.class,
         topic = "jme-retry-modulith-publication")
 @JeapMessageConsumerContract(value = DiscardModulithPublicationCommand.TypeRef.class,

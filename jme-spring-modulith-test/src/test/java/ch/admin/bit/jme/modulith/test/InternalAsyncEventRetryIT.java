@@ -1,6 +1,5 @@
 package ch.admin.bit.jme.modulith.test;
 
-import ch.admin.bit.jme.messaging.event.order.created.JmeOrderCreatedEvent;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,7 +32,7 @@ class InternalAsyncEventRetryIT extends SpringModulithExampleITBase {
     static void startServices() throws Exception {
         startAllServices();
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-scs",
-                JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
+                ORDER_CREATED_TOPIC);
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-error-scs",
                 "jme-modulith-publication-processing-failed");
         KafkaConsumerGroupAwaiter.waitForAssignment(

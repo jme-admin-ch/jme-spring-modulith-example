@@ -25,7 +25,7 @@ class OrderCreatedKafkaConsumer {
 
     private final OrderManagement orderManagement;
 
-    @KafkaListener(topics = JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC)
+    @KafkaListener(topics = MessagingTopics.ORDER_CREATED)
     void consume(JmeOrderCreatedEvent event, Acknowledgment ack) {
 
         String orderId = event.getReferences().getReference().getOrderId();

@@ -1,6 +1,5 @@
 package ch.admin.bit.jme.modulith.test;
 
-import ch.admin.bit.jme.messaging.event.order.created.JmeOrderCreatedEvent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +25,7 @@ class SpringModulithExampleIT extends SpringModulithExampleITBase {
     static void startServices() throws Exception {
         startAllServices();
         KafkaConsumerGroupAwaiter.waitForAssignment("jme-spring-modulith-scs",
-                JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC);
+                ORDER_CREATED_TOPIC);
     }
 
     @Test

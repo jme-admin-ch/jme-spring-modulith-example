@@ -7,6 +7,7 @@ import io.restassured.response.Response;
 import java.util.List;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 
 /**
  * Common setup for the integration tests: the URLs of the three services, the access tokens issued by
@@ -17,6 +18,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
     static final String AUTH_BASE_URL = "http://localhost:8091/jme-spring-modulith-auth-scs";
     static final String SERVICE_BASE_URL = "http://localhost:8090/jme-spring-modulith-scs";
     static final String ERROR_SCS_BASE_URL = "http://localhost:8092/error-handling";
+    static final String ORDER_CREATED_TOPIC = "jme-order-created-modulith";
 
     /** Client carrying the roles needed by the domain-facing modules, see auth-scs application-local.yml. */
     static final String CLIENT_ID = "jme-spring-modulith-client";
@@ -58,6 +60,7 @@ abstract class SpringModulithExampleITBase extends BootServiceSpringIntegrationT
                 .post("/api/demo/orders")
                 .then()
                 .statusCode(202)
+                .body("topic", equalTo(ORDER_CREATED_TOPIC))
                 .extract().jsonPath().getString("traceId");
     }
 

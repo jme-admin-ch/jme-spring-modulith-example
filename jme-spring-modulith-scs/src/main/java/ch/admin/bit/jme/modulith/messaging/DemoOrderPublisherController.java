@@ -50,7 +50,7 @@ class DemoOrderPublisherController {
                 .orderType(orderType)
                 .build();
 
-        kafkaTemplate.send(JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC, event)
+        kafkaTemplate.send(MessagingTopics.ORDER_CREATED, event)
                 .get(SEND_TIMEOUT_SEC, TimeUnit.SECONDS);
         log.info("Published JmeOrderCreatedEvent {} for order {} of type {}",
                 event.getIdentity().getEventId(), orderId, orderType);
@@ -58,7 +58,7 @@ class DemoOrderPublisherController {
         // The trace id ties the whole flow together: this call, the consumption of the event, and — if
         // processing fails — the entry the error handling service creates for it.
         return new PublishedEvent(event.getIdentity().getEventId(),
-                JmeOrderCreatedEvent.TypeRef.DEFAULT_TOPIC, orderId, orderType,
+                MessagingTopics.ORDER_CREATED, orderId, orderType,
                 traceContextProvider.getTraceContext().getTraceIdString());
     }
 
