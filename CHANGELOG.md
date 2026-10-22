@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-10-22
+
+### Dependencies
+- **ch.admin.bit.jeap:jeap-oauth-mock-server**: 11.11.0 → 11.12.0 (minor)
+- **ch.admin.bit.jeap:jeap-error-handling-service**: 25.8.2 → 25.9.0 (minor)
+- **org.springframework.modulith:spring-modulith-bom**: 2.1.1 → 2.1.2 (patch)
+
 ## [2.12.0] - 2026-10-21
 
 ### Dependencies
