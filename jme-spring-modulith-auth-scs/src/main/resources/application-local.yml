@@ -23,7 +23,7 @@ oauth-mock-data:
         - "jme_@error_#delete"
         - "jme_@errorgroup_#view"
         - "jme_@errorgroup_#edit"
-      audience: [ "jme-spring-modulith-error-scs" ]
+      audience: [ "https://resources.jme.admin.ch/jme/jme-spring-modulith-error-scs" ]
 
     # Client used by the README examples and by the integration tests to call the REST API of
     # jme-spring-modulith-scs. It carries the roles needed by the domain-facing modules.
@@ -39,7 +39,7 @@ oauth-mock-data:
         - "jme_@shipping_#read"
       # Audience the token is issued for. jme-spring-modulith-scs validates that its own
       # application name is contained in the audience of every incoming token.
-      audience: [ "jme-spring-modulith-scs" ]
+      audience: [ "https://resources.jme.admin.ch/jme/jme-spring-modulith-scs" ]
 
     # Same as above but without any of the roles above, to demonstrate that an authenticated caller
     # without the required semantic role is rejected with HTTP 403.
@@ -48,7 +48,7 @@ oauth-mock-data:
       context: "SYS"
       userroles:
         - "jme_@unrelated_#read"
-      audience: [ "jme-spring-modulith-scs" ]
+      audience: [ "https://resources.jme.admin.ch/jme/jme-spring-modulith-scs" ]
 
     # Client used by the integration tests and by the README examples to query the error handling
     # service. Its audience and roles are those of the error handling service, not of the modulith.
@@ -61,7 +61,7 @@ oauth-mock-data:
         - "jme_@error_#delete"
         - "jme_@errorgroup_#view"
         - "jme_@errorgroup_#edit"
-      audience: [ "jme-spring-modulith-error-scs" ]
+      audience: [ "https://resources.jme.admin.ch/jme/jme-spring-modulith-error-scs" ]
 
     # Client used by jme-spring-modulith-error-scs to call other services in the system context.
     - client-id: "jme-spring-modulith-error-service"
@@ -73,7 +73,7 @@ oauth-mock-data:
         - "jme_@error_#delete"
         - "jme_@errorgroup_#view"
         - "jme_@errorgroup_#edit"
-      audience: [ "jme-spring-modulith-error-scs" ]
+      audience: [ "https://resources.jme.admin.ch/jme/jme-spring-modulith-error-scs" ]
 
   users:
     # User offered in the login form of the mock server, holding every role used in this example.

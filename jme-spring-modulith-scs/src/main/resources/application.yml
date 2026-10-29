@@ -59,6 +59,8 @@ jeap:
   security:
     oauth2:
       resourceserver:
+        resource-id: "https://resources.jme.admin.ch/jme/jme-spring-modulith-scs"
+        strict-audience-validation: "on"
         # Setting the system name activates the semantic role model
         # (system_%tenant_@resource_#operation). Without it, roles would be opaque strings.
         system-name: "jme"
