@@ -1,8 +1,8 @@
 publiccodeYmlVersion: 0.5.0
 name: jme-spring-modulith-example
 applicationSuite: JME
-softwareVersion: 2.24.0
-releaseDate: 2026-11-08
+softwareVersion: 2.25.0
+releaseDate: 2026-11-10
 url: "https://github.com/jme-admin-ch/jme-spring-modulith-example.git"
 landingURL: "https://github.com/jme-admin-ch/jme"
 platforms:

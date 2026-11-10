@@ -33,7 +33,7 @@ services:
       - broker
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:8.4.0
+    image: confluentinc/cp-schema-registry:8.4.1
     hostname: schema-registry
     depends_on:
       - broker
